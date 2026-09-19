@@ -148,7 +148,7 @@ fun UploadScreen(
                 }
                 Column {
                     Text(
-                        text = "Single Upload",
+                        text = "File Upload",
                         style = MaterialTheme.typography.headlineMedium.copy(
                             color = MaterialTheme.colorScheme.onBackground,
                             fontWeight = FontWeight.Black,
@@ -156,7 +156,7 @@ fun UploadScreen(
                         )
                     )
                     Text(
-                        text = "Upload wallpaper to telegram channel",
+                        text = "Upload any file to your Telegram storage channel",
                         style = MaterialTheme.typography.labelSmall.copy(
                             color = primaryColor,
                             fontWeight = FontWeight.SemiBold
@@ -176,7 +176,7 @@ fun UploadScreen(
                     .background(MaterialTheme.colorScheme.surfaceContainer)
                     .border(2.dp, if (selectedUri != null) primaryColor else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp))
                     .clickable {
-                        singlePickerLauncher.launch("image/*")
+                        singlePickerLauncher.launch("*/*")
                     },
                 contentAlignment = Alignment.Center
             ) {
@@ -212,7 +212,7 @@ fun UploadScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Tap to select photo from gallery",
+                            text = "Tap to select any file",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Medium
                         )
@@ -260,7 +260,7 @@ fun UploadScreen(
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
-                label = { Text("Wallpaper Title") },
+                label = { Text("File Title") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
