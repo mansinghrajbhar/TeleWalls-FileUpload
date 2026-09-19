@@ -204,7 +204,7 @@ class UploadViewModel @Inject constructor(
         wallpaperType: String = _selectedWallpaperType.value
     ) {
         val uri = _selectedImageUri.value ?: run {
-            _uploadState.value = UploadState.Error("Please select a photo first")
+            _uploadState.value = UploadState.Error("Please select a file first")
             return
         }
 
@@ -212,17 +212,22 @@ class UploadViewModel @Inject constructor(
             _uploadState.value = UploadState.Processing("Preparing...")
             val extractedFileName = getFileNameFromUri(context, uri)
             val file = copyUriToTempFile(context, uri, extractedFileName) ?: run {
-                _uploadState.value = UploadState.Error("Failed to process image file")
+                _uploadState.value = UploadState.Error("Failed to read selected file")
                 return@launch
             }
 
             val finalFileName = extractedFileName ?: file.name
             val wallpaperTitle = title.trim().ifBlank { finalFileName }
 
-            val chosenType = if (wallpaperType.isNotBlank() && !wallpaperType.contains("Auto", ignoreCase = true)) {
-                wallpaperType
+            val isImage = getMimeTypeFromUri(context, uri)?.lowercase()?.startsWith("image/") == true
+            val chosenType = if (isImage) {
+                if (wallpaperType.isNotBlank() && !wallpaperType.contains("Auto", ignoreCase = true)) {
+                    wallpaperType
+                } else {
+                    autoDetectWallpaperType(_detectedResolution.value)
+                }
             } else {
-                autoDetectWallpaperType(_detectedResolution.value)
+                "File"
             }
 
             val finalCategory = category.trim().ifBlank { "Uncategorized" }
@@ -240,7 +245,7 @@ class UploadViewModel @Inject constructor(
                 wallpaperType = chosenType
             )
 
-            val mimeType = getMimeTypeFromUri(context, uri) ?: "image/jpeg"
+            val mimeType = getMimeTypeFromUri(context, uri) ?: "application/octet-stream"
 
             val chatId = authRepository.activeChannelIdFlow.firstOrNull()
             val targetChatId = chatId ?: 99999L
