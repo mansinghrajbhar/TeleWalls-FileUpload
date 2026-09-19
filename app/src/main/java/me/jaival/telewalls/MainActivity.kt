@@ -71,8 +71,6 @@ class MainActivity : ComponentActivity() {
         val action = intent.action ?: return emptyList()
         val type = intent.type ?: return emptyList()
 
-        if (!type.startsWith("image/")) return emptyList()
-
         val uris = mutableListOf<Uri>()
 
         when (action) {
