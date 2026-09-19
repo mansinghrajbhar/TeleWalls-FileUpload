@@ -214,7 +214,7 @@ fun MassUploadDialog(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Scanning folder for photos...",
+                            text = "Scanning folder for files...",
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontWeight = FontWeight.SemiBold
@@ -250,7 +250,7 @@ fun MassUploadDialog(
                         subtitle = "Pick multiple image files from gallery",
                         icon = Icons.Filled.AddPhotoAlternate,
                         primaryColor = primaryColor,
-                        onClick = { multiPhotoLauncher.launch("image/*") }
+                        onClick = { multiPhotoLauncher.launch("*/*") }
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
