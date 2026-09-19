@@ -249,21 +249,28 @@ class MassUploadService : Service() {
             val tempFile = copyUriToTempFile(uri, rawFileName, index)
             if (tempFile == null || !tempFile.exists()) {
                 failureCount++
-                errorDetails.add("File #$currentIndex ($cleanTitle): Failed to access image file.")
+                errorDetails.add("File #$currentIndex ($cleanTitle): Failed to access selected file.")
                 continue
             }
 
-            // Extract metadata as in single upload
-            val (width, height) = detectResolution(uri)
-            val resolutionStr = "${width}x${height}"
-            val aspectRatioStr = computeAspectRatioString(width, height)
-            val autoWallpaperTypeStr = if (width >= height) "Desktop/Tablet" else "Phone"
-            val wallpaperTypeStr = when {
-                batchWallpaperType.equals("Phone", ignoreCase = true) -> "Phone"
-                batchWallpaperType.equals("Desktop/Tablet", ignoreCase = true) || batchWallpaperType.equals("Desktop", ignoreCase = true) -> "Desktop/Tablet"
-                else -> autoWallpaperTypeStr
+            // Image-specific metadata is only calculated for images.
+            // Other files are uploaded directly as Telegram documents.
+            val mimeType = getMimeTypeFromUri(uri) ?: "application/octet-stream"
+            val isImage = mimeType.lowercase().startsWith("image/")
+            val (width, height) = if (isImage) detectResolution(uri) else Pair(0, 0)
+            val resolutionStr = if (isImage && width > 0 && height > 0) "${width}x${height}" else ""
+            val aspectRatioStr = if (isImage && width > 0 && height > 0) computeAspectRatioString(width, height) else ""
+            val autoWallpaperTypeStr = if (isImage && width >= height) "Desktop/Tablet" else "Phone"
+            val wallpaperTypeStr = if (isImage) {
+                when {
+                    batchWallpaperType.equals("Phone", ignoreCase = true) -> "Phone"
+                    batchWallpaperType.equals("Desktop/Tablet", ignoreCase = true) || batchWallpaperType.equals("Desktop", ignoreCase = true) -> "Desktop/Tablet"
+                    else -> autoWallpaperTypeStr
+                }
+            } else {
+                "File"
             }
-            val colorsList = PaletteExtractor.extractColorsFromUri(this, uri).hexList
+            val colorsList = if (isImage) PaletteExtractor.extractColorsFromUri(this, uri).hexList else emptyList()
             val authorName = batchAuthor.takeIf { it.isNotBlank() } ?: CharacterAuthorUtils.getRandomCharacterName()
             val categoryStr = batchCategory.takeIf { it.isNotBlank() } ?: "Uncategorized"
 
@@ -281,7 +288,6 @@ class MassUploadService : Service() {
                 wallpaperType = wallpaperTypeStr
             )
 
-            val mimeType = getMimeTypeFromUri(uri) ?: "image/jpeg"
             val finalFileName = rawFileName ?: tempFile.name
 
             var uploadSuccess = false
@@ -317,7 +323,7 @@ class MassUploadService : Service() {
             } else {
                 failureCount++
                 val detail = errorMessage ?: "Upload failed"
-                errorDetails.add("Photo #$currentIndex ($cleanTitle): $detail")
+                errorDetails.add("File #$currentIndex ($cleanTitle): $detail")
 
                 // Handle FLOOD_WAIT if rate limited
                 if (detail.contains("FLOOD_WAIT", ignoreCase = true) || detail.contains("rate limit", ignoreCase = true)) {
