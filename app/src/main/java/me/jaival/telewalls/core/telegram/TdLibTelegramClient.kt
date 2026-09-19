@@ -410,8 +410,9 @@ class TdLibTelegramClient @Inject constructor(
 
         val job = scope.launch {
             try {
-                // Step 1: Create a compressed 600px thumbnail file from localPath
-                val thumbFile = createThumbnailFile(localPath)
+                // Only images get a thumbnail. All other files are uploaded as Telegram documents.
+                val isImage = mimeType.lowercase().startsWith("image/")
+                val thumbFile = if (isImage) createThumbnailFile(localPath) else null
                 val jsonCaption = buildCaptionString(metadata)
 
                 val inputThumbnail = thumbFile?.let {
@@ -423,7 +424,7 @@ class TdLibTelegramClient @Inject constructor(
                 val docContent = TdApi.InputMessageDocument().apply {
                     document = TdApi.InputFileLocal(localPath)
                     thumbnail = inputThumbnail
-                    disableContentTypeDetection = true
+                    disableContentTypeDetection = false
                     caption = TdApi.FormattedText(jsonCaption, emptyArray())
                 }
 
