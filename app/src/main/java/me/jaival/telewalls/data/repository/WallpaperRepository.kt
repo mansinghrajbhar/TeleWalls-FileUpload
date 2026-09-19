@@ -1,0 +1,863 @@
+package me.jaival.telewalls.data.repository
+
+import android.content.Context
+import android.graphics.BitmapFactory
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import me.jaival.telewalls.core.telegram.TelegramClient
+import me.jaival.telewalls.core.telegram.TelegramUploadEvent
+import me.jaival.telewalls.core.telegram.WallpaperDocument
+import me.jaival.telewalls.core.telegram.WallpaperMetadata
+import me.jaival.telewalls.data.local.dao.WallpaperDao
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
+import me.jaival.telewalls.core.util.CharacterAuthorUtils
+import me.jaival.telewalls.core.util.ColorSearchUtils
+import me.jaival.telewalls.data.local.dao.CategoryDao
+import me.jaival.telewalls.data.local.entity.CategoryEntity
+import me.jaival.telewalls.data.local.entity.FavoriteEntity
+import me.jaival.telewalls.data.local.entity.WallpaperEntity
+import dagger.hilt.android.qualifiers.ApplicationContext
+import coil.imageLoader
+import me.jaival.telewalls.BuildConfig
+import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
+
+data class Wallpaper(
+    val id: String,
+    val messageId: Long,
+    val chatId: Long,
+    val fileId: String,
+    val fileName: String,
+    val mimeType: String,
+    val sizeBytes: Long,
+    val title: String,
+    val category: String,
+    val tags: List<String>,
+    val resolution: String,
+    val aspectRatio: String,
+    val colors: List<String>,
+    val description: String,
+    val author: String,
+    val timestamp: Long,
+    val localPath: String?,
+    val thumbnailPath: String?,
+    val isFavorite: Boolean,
+    val wallpaperType: String = "Phone"
+)
+
+@Singleton
+class WallpaperRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val telegramClient: TelegramClient,
+    private val wallpaperDao: WallpaperDao,
+    private val categoryDao: CategoryDao,
+    private val authRepository: AuthRepository,
+    private val settingsRepository: SettingsRepository
+) {
+    companion object {
+        private const val TAG = "WallpaperRepository"
+        val DEFAULT_CATEGORIES = emptyList<String>()
+
+        private fun matchesTypeFilter(wallpaper: Wallpaper, filter: WallpaperTypeFilter): Boolean {
+            return when (filter) {
+                WallpaperTypeFilter.BOTH -> true
+                WallpaperTypeFilter.PHONE -> wallpaper.wallpaperType.contains("Phone", ignoreCase = true) || wallpaper.wallpaperType.isBlank()
+                WallpaperTypeFilter.DESKTOP -> wallpaper.wallpaperType.contains("Desktop", ignoreCase = true) || wallpaper.wallpaperType.contains("Tablet", ignoreCase = true)
+            }
+        }
+    }
+
+    val allWallpapers: Flow<List<Wallpaper>> = combine(
+        wallpaperDao.getAllWallpapers(),
+        authRepository.activeChannelIdFlow,
+        settingsRepository.wallpaperTypeFlow,
+        settingsRepository.hiddenCategoriesFlow
+    ) { entities, activeChatId, typeFilter, hiddenSet ->
+        val lowerHidden = hiddenSet.map { it.lowercase() }.toSet()
+        entities
+            .filter { activeChatId == null || activeChatId == 0L || it.chatId == activeChatId }
+            .map { it.toDomain() }
+            .filter { matchesTypeFilter(it, typeFilter) }
+            .filter { !lowerHidden.contains(it.category.lowercase()) }
+    }
+
+    val favoriteWallpapers: Flow<List<Wallpaper>> = combine(
+        wallpaperDao.getFavoriteWallpapers(),
+        authRepository.activeChannelIdFlow,
+        settingsRepository.wallpaperTypeFlow,
+        settingsRepository.hiddenCategoriesFlow
+    ) { entities, activeChatId, typeFilter, hiddenSet ->
+        val lowerHidden = hiddenSet.map { it.lowercase() }.toSet()
+        entities
+            .filter { activeChatId == null || activeChatId == 0L || it.chatId == activeChatId }
+            .map { it.toDomain() }
+            .filter { matchesTypeFilter(it, typeFilter) }
+            .filter { !lowerHidden.contains(it.category.lowercase()) }
+    }
+
+    val rawCategories: Flow<List<String>> = combine(
+        categoryDao.getAllCategories(),
+        allWallpapers
+    ) { dbCategories, wallpapers ->
+        val result = mutableListOf<String>()
+        val activeWallpaperCats = wallpapers.map { it.category.trim() }.filter { it.isNotBlank() }
+        if (dbCategories.isNotEmpty()) {
+            for (cat in dbCategories) {
+                val trimmed = cat.trim()
+                val lower = trimmed.lowercase()
+                if (lower == "uncategorized" || lower == "uncategorised") {
+                    if (activeWallpaperCats.any { it.lowercase() == lower }) {
+                        result.add(trimmed)
+                    }
+                } else {
+                    result.add(trimmed)
+                }
+            }
+        } else {
+            result.addAll(DEFAULT_CATEGORIES)
+        }
+        for (cat in activeWallpaperCats) {
+            val trimmed = cat.trim()
+            if (trimmed.isNotBlank() && !trimmed.equals("All", ignoreCase = true)) {
+                if (result.none { it.equals(trimmed, ignoreCase = true) }) {
+                    result.add(trimmed)
+                }
+            }
+        }
+        result.map { it.trim() }
+            .filter { it.isNotBlank() && !it.equals("All", ignoreCase = true) }
+            .distinctBy { it.lowercase() }
+    }
+
+    val categories: Flow<List<String>> = combine(
+        rawCategories,
+        settingsRepository.hiddenCategoriesFlow
+    ) { cats, hiddenSet ->
+        val lowerHidden = hiddenSet.map { it.lowercase() }.toSet()
+        cats.filter { !lowerHidden.contains(it.lowercase()) }
+    }
+
+    fun getWallpapersByCategory(category: String): Flow<List<Wallpaper>> {
+        return searchWallpapers(query = "", category = category)
+    }
+
+    fun searchWallpapers(query: String, categories: Set<String> = setOf("All")): Flow<List<Wallpaper>> {
+        val cleanQuery = query.trim()
+        val isAll = categories.isEmpty() || categories.any { it.equals("All", ignoreCase = true) }
+        if (cleanQuery.isEmpty() && isAll) {
+            return allWallpapers
+        }
+
+        return allWallpapers.map { list ->
+            list.mapNotNull { wallpaper ->
+                val (isMatch, score) = ColorSearchUtils.evaluateWallpaper(wallpaper, cleanQuery, categories)
+                if (isMatch) Pair(wallpaper, score) else null
+            }
+            .sortedWith(compareByDescending<Pair<Wallpaper, Double>> { it.second }.thenByDescending { it.first.timestamp })
+            .map { it.first }
+        }
+    }
+
+    fun searchWallpapers(query: String, category: String): Flow<List<Wallpaper>> {
+        return searchWallpapers(query, setOf(category))
+    }
+
+    suspend fun getWallpaperById(id: String): Wallpaper? {
+        return wallpaperDao.getWallpaperById(id)?.toDomain()
+    }
+
+    suspend fun reindexFromChannel(chatId: Long): Result<Pair<Int, Int>> = withContext(Dispatchers.IO) {
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "[REINDEX DEBUG] Starting reindexFromChannel for chatId=$chatId")
+        }
+        try {
+            // Delete cached wallpapers & categories from other channels so old channel data does not persist
+            wallpaperDao.deleteAllWallpapersExceptChatId(chatId)
+            categoryDao.clearCategories()
+            wallpaperDao.deleteOrphanFavorites()
+
+            val catResult = syncCategoriesFromChannel(chatId)
+            val wpResult = syncWallpapersFromChannel(chatId)
+            val favResult = syncFavoritesFromChannel(chatId)
+            if (catResult.isFailure) {
+                val err = catResult.exceptionOrNull() ?: Exception("Failed to sync categories")
+                return@withContext Result.failure(err)
+            }
+            if (wpResult.isFailure) {
+                val err = wpResult.exceptionOrNull() ?: Exception("Failed to sync wallpapers")
+                return@withContext Result.failure(err)
+            }
+            if (favResult.isFailure) {
+                val err = favResult.exceptionOrNull() ?: Exception("Failed to sync favorites")
+                return@withContext Result.failure(err)
+            }
+            val categoriesCount = catResult.getOrDefault(0)
+            val wallpapersCount = wpResult.getOrDefault(0)
+            val favoritesCount = favResult.getOrDefault(0)
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "[REINDEX DEBUG] Reindex finished successfully: $wallpapersCount wallpapers, $categoriesCount categories, $favoritesCount favorites for chatId=$chatId")
+            }
+            Result.success(Pair(wallpapersCount, categoriesCount))
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "[REINDEX DEBUG] Error reindexing from channel for chatId=$chatId: ${e.message}", e)
+            }
+            Log.e(TAG, "Error reindexing from channel", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun syncWallpapersFromChannel(chatId: Long): Result<Int> = withContext(Dispatchers.IO) {
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "[REINDEX DEBUG] Starting syncWallpapersFromChannel for chatId=$chatId")
+        }
+        try {
+            val documents = telegramClient.fetchWallpapers(chatId, fromMessageId = 0L, limit = Int.MAX_VALUE)
+            val fetchedIds = documents.map { "${it.chatId}_${it.messageId}" }.toSet()
+
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "[REINDEX DEBUG] Fetched ${documents.size} wallpaper documents from Telegram channel chatId=$chatId. Remote IDs: $fetchedIds")
+            }
+
+            val existingEntities = wallpaperDao.getWallpapersByChatId(chatId)
+            val deletedEntities = existingEntities.filter { it.id !in fetchedIds }
+
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "[REINDEX DEBUG] Existing DB entities count=${existingEntities.size}, Orphaned/Deleted entities count=${deletedEntities.size}")
+            }
+
+            if (deletedEntities.isNotEmpty()) {
+                val deletedIds = deletedEntities.map { it.id }
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "[REINDEX DEBUG] Removing orphaned wallpaper IDs from DB: $deletedIds")
+                }
+                wallpaperDao.deleteWallpapersByIds(deletedIds)
+                wallpaperDao.deleteOrphanFavorites()
+                cleanUpUncategorizedCategoryIfEmpty()
+
+                deletedEntities.forEach { entity ->
+                    entity.localPath?.let { path ->
+                        if (path.startsWith("/") && !path.startsWith("http")) {
+                            try { File(path).delete() } catch (e: Exception) { Log.e(TAG, "Error deleting local cached file", e) }
+                        }
+                    }
+                    entity.thumbnailPath?.let { path ->
+                        if (path.startsWith("/") && !path.startsWith("http")) {
+                            try { File(path).delete() } catch (e: Exception) { Log.e(TAG, "Error deleting local thumbnail file", e) }
+                        }
+                    }
+                }
+            }
+
+            if (documents.isNotEmpty()) {
+                val entities = documents.map { doc ->
+                    val id = "${doc.chatId}_${doc.messageId}"
+                    val existingEntity = wallpaperDao.getWallpaperById(id)
+                    val isFav = wallpaperDao.isFavorite(id) || (existingEntity?.isFavorite ?: false)
+                    val existingLocalPath = existingEntity?.localPath?.takeIf {
+                        it.isNotBlank() && (it.startsWith("http") || File(it).exists())
+                    }
+                    val existingThumbnailPath = existingEntity?.thumbnailPath?.takeIf {
+                        it.isNotBlank() && (it.startsWith("http") || (File(it).exists() && File(it).length() > 0))
+                    }
+                    val finalThumbnailPath = doc.thumbnailPath?.takeIf {
+                        it.isNotBlank() && (it.startsWith("http") || (File(it).exists() && File(it).length() > 0))
+                    } ?: existingThumbnailPath
+                    doc.toEntity(
+                        isFav = isFav,
+                        localPathOverride = existingLocalPath,
+                        thumbnailPathOverride = finalThumbnailPath
+                    )
+                }
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "[REINDEX DEBUG] Inserting/updating ${entities.size} entities into Room DB. Sample: ${entities.firstOrNull()?.let { "id=${it.id}, title='${it.title}', type='${it.wallpaperType}'" }}")
+                }
+                wallpaperDao.insertWallpapers(entities)
+            }
+            Result.success(documents.size)
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "[REINDEX DEBUG] Exception in syncWallpapersFromChannel for chatId=$chatId: ${e.message}", e)
+            }
+            Log.e(TAG, "Error syncing wallpapers from channel", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun addCategory(name: String, chatId: Long? = null): Boolean = withContext(Dispatchers.IO) {
+        val cleanName = name.trim()
+        if (cleanName.isBlank() || cleanName.equals("All", ignoreCase = true)) return@withContext false
+
+        val currentList = rawCategories.first()
+        if (currentList.any { it.equals(cleanName, ignoreCase = true) }) return@withContext true
+
+        val nextOrder = currentList.size
+        val updatedList = (currentList + cleanName).map { it.trim() }.distinctBy { it.lowercase() }
+        val targetChatId = chatId ?: authRepository.activeChannelIdFlow.firstOrNull()
+
+        if (targetChatId != null && targetChatId != 0L) {
+            val telegramSuccess = telegramClient.saveCategoriesMessage(targetChatId, updatedList)
+            if (!telegramSuccess) {
+                Log.e(TAG, "Failed to save category list to Telegram")
+                return@withContext false
+            }
+        }
+
+        categoryDao.insertCategory(CategoryEntity(name = cleanName, sortOrder = nextOrder))
+        true
+    }
+
+    suspend fun reorderCategories(newOrderedList: List<String>, chatId: Long? = null): Boolean = withContext(Dispatchers.IO) {
+        val cleanList = newOrderedList
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.equals("All", ignoreCase = true) }
+            .distinctBy { it.lowercase() }
+
+        val rawList = rawCategories.first()
+
+        val newOrderedIterator = cleanList.iterator()
+        val finalFullList = mutableListOf<String>()
+
+        for (existingCat in rawList) {
+            if (cleanList.any { it.equals(existingCat, ignoreCase = true) }) {
+                if (newOrderedIterator.hasNext()) {
+                    finalFullList.add(newOrderedIterator.next())
+                }
+            } else {
+                finalFullList.add(existingCat)
+            }
+        }
+        while (newOrderedIterator.hasNext()) {
+            finalFullList.add(newOrderedIterator.next())
+        }
+
+        val targetChatId = chatId ?: authRepository.activeChannelIdFlow.firstOrNull()
+        if (targetChatId != null && targetChatId != 0L) {
+            val telegramSuccess = telegramClient.saveCategoriesMessage(targetChatId, finalFullList)
+            if (!telegramSuccess) {
+                Log.e(TAG, "Failed to save reordered categories to Telegram")
+                return@withContext false
+            }
+        }
+
+        categoryDao.clearCategories()
+        val entities = finalFullList.mapIndexed { index, name ->
+            CategoryEntity(name = name, sortOrder = index)
+        }
+        categoryDao.insertCategories(entities)
+        true
+    }
+
+    suspend fun deleteCategory(categoryName: String, chatId: Long? = null): Boolean = withContext(Dispatchers.IO) {
+        val cleanName = categoryName.trim()
+        if (cleanName.isBlank()) return@withContext false
+
+        val remainingCategories = rawCategories.first().filter { !it.equals(cleanName, ignoreCase = true) }
+        val targetChatId = chatId ?: authRepository.activeChannelIdFlow.firstOrNull()
+        if (targetChatId != null && targetChatId != 0L) {
+            val telegramSuccess = telegramClient.saveCategoriesMessage(targetChatId, remainingCategories)
+            if (!telegramSuccess) {
+                Log.e(TAG, "Failed to save categories to Telegram after deletion")
+                return@withContext false
+            }
+        }
+
+        categoryDao.deleteCategory(cleanName)
+        settingsRepository.removeHiddenCategory(cleanName)
+        true
+    }
+
+    suspend fun renameCategory(oldName: String, newName: String, chatId: Long? = null): Boolean = withContext(Dispatchers.IO) {
+        val cleanOld = oldName.trim()
+        val cleanNew = newName.trim()
+        if (cleanOld.isBlank() || cleanNew.isBlank() || cleanNew.equals("All", ignoreCase = true)) return@withContext false
+        if (cleanOld == cleanNew) return@withContext true
+
+        val currentList = rawCategories.first()
+        if (currentList.none { it.equals(cleanOld, ignoreCase = true) }) return@withContext false
+        if (currentList.any { it.equals(cleanNew, ignoreCase = true) && !it.equals(cleanOld, ignoreCase = true) }) {
+            return@withContext false
+        }
+
+        val updatedCategories = currentList.map { if (it.equals(cleanOld, ignoreCase = true)) cleanNew else it }
+        val targetChatId = chatId ?: authRepository.activeChannelIdFlow.firstOrNull()
+        if (targetChatId != null && targetChatId != 0L) {
+            val telegramSuccess = telegramClient.saveCategoriesMessage(targetChatId, updatedCategories)
+            if (!telegramSuccess) {
+                Log.e(TAG, "Failed to save renamed category list to Telegram")
+                return@withContext false
+            }
+        }
+
+        categoryDao.renameCategory(cleanOld, cleanNew)
+        wallpaperDao.updateWallpaperCategory(cleanOld, cleanNew)
+        settingsRepository.updateHiddenCategoryName(cleanOld, cleanNew)
+        true
+    }
+
+    suspend fun syncCategoriesFromChannel(chatId: Long): Result<Int> = withContext(Dispatchers.IO) {
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "[REINDEX DEBUG] Starting syncCategoriesFromChannel for chatId=$chatId")
+        }
+        try {
+            val remoteCategories = telegramClient.fetchCategoriesMessage(chatId)
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "[REINDEX DEBUG] Fetched remote categories count=${remoteCategories.size}: $remoteCategories")
+            }
+            categoryDao.clearCategories()
+            if (remoteCategories.isNotEmpty()) {
+                val entities = remoteCategories.mapIndexed { index, name ->
+                    CategoryEntity(name = name.trim(), sortOrder = index)
+                }
+                categoryDao.insertCategories(entities)
+                Result.success(remoteCategories.size)
+            } else {
+                Result.success(0)
+            }
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "[REINDEX DEBUG] Exception in syncCategoriesFromChannel for chatId=$chatId: ${e.message}", e)
+            }
+            Log.e(TAG, "Error syncing categories from channel", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun syncFavoritesFromChannel(chatId: Long): Result<Int> = withContext(Dispatchers.IO) {
+        if (!settingsRepository.syncFavoritesFlow.first()) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "[REINDEX DEBUG] Skipping syncFavoritesFromChannel because syncFavorites is disabled in settings")
+            }
+            return@withContext Result.success(0)
+        }
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "[REINDEX DEBUG] Starting syncFavoritesFromChannel for chatId=$chatId")
+        }
+        try {
+            val remoteFavorites = telegramClient.fetchFavoritesMessage(chatId).map { it.trim() }.filter { it.isNotBlank() }
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "[REINDEX DEBUG] Fetched remote favorites count=${remoteFavorites.size}: $remoteFavorites")
+            }
+
+            wallpaperDao.clearFavorites()
+            wallpaperDao.clearAllFavoriteFlags()
+
+            if (remoteFavorites.isNotEmpty()) {
+                val entities = remoteFavorites.map { FavoriteEntity(wallpaperId = it) }
+                wallpaperDao.insertFavorites(entities)
+
+                val stringIds = remoteFavorites
+                val numericIds = remoteFavorites.mapNotNull { fav ->
+                    fav.substringAfter("_").toLongOrNull()
+                }
+                wallpaperDao.setFavoriteFlags(stringIds, numericIds)
+            }
+            wallpaperDao.deleteOrphanFavorites()
+            Result.success(remoteFavorites.size)
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "[REINDEX DEBUG] Exception in syncFavoritesFromChannel for chatId=$chatId: ${e.message}", e)
+            }
+            Log.e(TAG, "Error syncing favorites from channel", e)
+            Result.failure(e)
+        }
+    }
+
+    fun uploadWallpaper(
+        chatId: Long,
+        localPath: String,
+        fileName: String,
+        mimeType: String,
+        metadata: WallpaperMetadata
+    ): Flow<TelegramUploadEvent> {
+        return telegramClient.uploadWallpaper(chatId, localPath, fileName, mimeType, metadata)
+    }
+
+    suspend fun saveUploadedWallpaperToDb(doc: WallpaperDocument) {
+        wallpaperDao.insertWallpaper(doc.toEntity(isFav = false))
+    }
+
+    suspend fun toggleFavorite(wallpaperId: String, chatId: Long? = null) = withContext(Dispatchers.IO) {
+        val currentlyFav = wallpaperDao.isFavorite(wallpaperId)
+        val newFavState = !currentlyFav
+        wallpaperDao.updateFavoriteStatus(wallpaperId, newFavState)
+        if (newFavState) {
+            wallpaperDao.addFavorite(FavoriteEntity(wallpaperId))
+        } else {
+            wallpaperDao.removeFavorite(wallpaperId)
+        }
+
+        if (settingsRepository.syncFavoritesFlow.first()) {
+            val targetChatId = chatId ?: wallpaperDao.getWallpaperById(wallpaperId)?.chatId
+            if (targetChatId != null && targetChatId != 0L) {
+                val currentFavs = wallpaperDao.getAllFavoriteEntities().map { it.wallpaperId }
+                telegramClient.saveFavoritesMessage(targetChatId, currentFavs)
+            }
+        }
+    }
+
+    suspend fun deleteWallpaper(wallpaper: Wallpaper): Boolean = withContext(Dispatchers.IO) {
+        val success = telegramClient.deleteWallpaper(wallpaper.chatId, wallpaper.messageId)
+        if (success) {
+            wallpaperDao.deleteWallpaperById(wallpaper.id)
+            wallpaperDao.removeFavorite(wallpaper.id)
+            if (wallpaper.chatId != 0L && settingsRepository.syncFavoritesFlow.first()) {
+                val currentFavs = wallpaperDao.getAllFavoriteEntities().map { it.wallpaperId }
+                telegramClient.saveFavoritesMessage(wallpaper.chatId, currentFavs)
+            }
+            cleanUpUncategorizedCategoryIfEmpty()
+        }
+        success
+    }
+
+    private suspend fun cleanUpUncategorizedCategoryIfEmpty() {
+        val count = wallpaperDao.getAllWallpaperEntities().count {
+            it.category.equals("Uncategorized", ignoreCase = true) || it.category.equals("uncategorised", ignoreCase = true)
+        }
+        if (count == 0) {
+            categoryDao.deleteCategory("Uncategorized")
+            categoryDao.deleteCategory("uncategorised")
+        }
+    }
+
+    fun autoDetectWallpaperType(wallpaper: Wallpaper): String {
+        if (wallpaper.resolution.isNotBlank()) {
+            val resParts = wallpaper.resolution.lowercase().split("x", "*", ":").map { it.trim() }
+            if (resParts.size == 2) {
+                val w = resParts[0].toIntOrNull()
+                val h = resParts[1].toIntOrNull()
+                if (w != null && h != null && w > 0 && h > 0) {
+                    return if (w >= h) "Desktop/Tablet" else "Phone"
+                }
+            }
+        }
+
+        if (wallpaper.aspectRatio.isNotBlank()) {
+            val ratioParts = wallpaper.aspectRatio.lowercase().split(":", "/", "x").map { it.trim() }
+            if (ratioParts.size == 2) {
+                val w = ratioParts[0].toDoubleOrNull()
+                val h = ratioParts[1].toDoubleOrNull()
+                if (w != null && h != null && w > 0 && h > 0) {
+                    return if (w >= h) "Desktop/Tablet" else "Phone"
+                }
+            }
+        }
+
+        val imagePath = wallpaper.localPath ?: wallpaper.thumbnailPath
+        if (!imagePath.isNullOrBlank() && !imagePath.startsWith("http") && File(imagePath).exists()) {
+            try {
+                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(imagePath, options)
+                if (options.outWidth > 0 && options.outHeight > 0) {
+                    return if (options.outWidth >= options.outHeight) "Desktop/Tablet" else "Phone"
+                }
+            } catch (e: Exception) {
+                // Ignore decoding exception and fallback
+            }
+        }
+
+        return "Phone"
+    }
+
+    suspend fun updateWallpaperMetadata(
+        wallpaper: Wallpaper,
+        title: String,
+        author: String,
+        category: String,
+        tags: List<String>,
+        description: String,
+        wallpaperType: String = wallpaper.wallpaperType
+    ): Boolean = withContext(Dispatchers.IO) {
+        val cleanTitle = title.ifBlank { "Untitled Wallpaper" }
+        val cleanAuthor = author.trim().ifBlank { CharacterAuthorUtils.getRandomCharacterName() }
+        val cleanCategory = category.trim().ifBlank { "Uncategorized" }
+        val cleanTags = tags.map { it.trim() }.filter { it.isNotBlank() }
+        val tagsCsv = cleanTags.joinToString(",")
+        val cleanType = if (wallpaperType.equals("Auto-detect", ignoreCase = true)) {
+            autoDetectWallpaperType(wallpaper)
+        } else {
+            wallpaperType.ifBlank { "Phone" }
+        }
+
+        val updatedMetadata = WallpaperMetadata(
+            title = cleanTitle,
+            category = cleanCategory,
+            tags = cleanTags,
+            resolution = wallpaper.resolution,
+            aspectRatio = wallpaper.aspectRatio,
+            sizeBytes = wallpaper.sizeBytes,
+            colors = wallpaper.colors,
+            description = description,
+            author = cleanAuthor,
+            timestamp = wallpaper.timestamp,
+            wallpaperType = cleanType
+        )
+
+        if (wallpaper.chatId != 0L && wallpaper.messageId != 0L) {
+            val telegramSuccess = telegramClient.editWallpaperMetadata(
+                chatId = wallpaper.chatId,
+                messageId = wallpaper.messageId,
+                metadata = updatedMetadata
+            )
+            if (!telegramSuccess) {
+                Log.e(TAG, "Failed to update wallpaper metadata on Telegram for messageId=${wallpaper.messageId}")
+                return@withContext false
+            }
+        }
+
+        wallpaperDao.updateWallpaperMetadata(
+            id = wallpaper.id,
+            title = cleanTitle,
+            author = cleanAuthor,
+            category = cleanCategory,
+            tagsCsv = tagsCsv,
+            description = description,
+            wallpaperType = cleanType
+        )
+
+        cleanUpUncategorizedCategoryIfEmpty()
+        true
+    }
+
+    suspend fun deleteWallpapers(wallpapers: List<Wallpaper>): Int = withContext(Dispatchers.IO) {
+        var deletedCount = 0
+        wallpapers.forEach { wallpaper ->
+            val success = deleteWallpaper(wallpaper)
+            if (success) {
+                deletedCount++
+            }
+        }
+        deletedCount
+    }
+
+    suspend fun batchUpdateWallpaperMetadata(
+        wallpapers: List<Wallpaper>,
+        author: String? = null,
+        category: String? = null,
+        tags: List<String>? = null,
+        wallpaperType: String? = null
+    ): Int = withContext(Dispatchers.IO) {
+        var updatedCount = 0
+        wallpapers.forEach { wallpaper ->
+            val newAuthor = if (!author.isNullOrBlank()) author.trim() else wallpaper.author
+            val newCategory = if (!category.isNullOrBlank()) category.trim() else wallpaper.category
+            val newTags = if (tags != null && tags.isNotEmpty()) tags else wallpaper.tags
+            val newType = if (!wallpaperType.isNullOrBlank() && !wallpaperType.equals("Keep original", ignoreCase = true)) {
+                if (wallpaperType.equals("Auto-detect", ignoreCase = true)) {
+                    autoDetectWallpaperType(wallpaper)
+                } else {
+                    wallpaperType.trim()
+                }
+            } else {
+                wallpaper.wallpaperType
+            }
+
+            val success = updateWallpaperMetadata(
+                wallpaper = wallpaper,
+                title = wallpaper.title,
+                author = newAuthor,
+                category = newCategory,
+                tags = newTags,
+                description = wallpaper.description,
+                wallpaperType = newType
+            )
+            if (success) {
+                updatedCount++
+            }
+        }
+        updatedCount
+    }
+
+
+    suspend fun downloadWallpaperFile(fileId: String, fileName: String): String? = withContext(Dispatchers.IO) {
+        val safeName = if (fileName.isNotBlank()) "${fileId}_$fileName" else "wallpaper_$fileId.jpg"
+        val destFile = File(context.cacheDir, safeName)
+        telegramClient.downloadWallpaperFile(fileId, destFile.absolutePath)
+    }
+
+    suspend fun downloadFullWallpaper(wallpaper: Wallpaper): String? = withContext(Dispatchers.IO) {
+        val currentLocal = wallpaper.localPath
+        if (!currentLocal.isNullOrBlank() && (currentLocal.startsWith("http") || (File(currentLocal).exists() && File(currentLocal).length() > 0))) {
+            return@withContext currentLocal
+        }
+        val safeName = if (wallpaper.fileName.isNotBlank()) "${wallpaper.fileId}_${wallpaper.fileName}" else "wallpaper_${wallpaper.fileId}.jpg"
+        val cachedFile = File(context.cacheDir, safeName)
+        if (cachedFile.exists() && cachedFile.length() > 0) {
+            wallpaperDao.updateLocalPath(wallpaper.id, cachedFile.absolutePath)
+            return@withContext cachedFile.absolutePath
+        }
+        val downloadedPath = downloadWallpaperFile(wallpaper.fileId, wallpaper.fileName)
+        if (!downloadedPath.isNullOrBlank() && (downloadedPath.startsWith("http") || (File(downloadedPath).exists() && File(downloadedPath).length() > 0))) {
+            wallpaperDao.updateLocalPath(wallpaper.id, downloadedPath)
+            return@withContext downloadedPath
+        }
+        null
+    }
+
+    suspend fun loadThumbnailOnDemand(wallpaper: Wallpaper): String? = withContext(Dispatchers.IO) {
+        val currentThumb = wallpaper.thumbnailPath
+        if (!currentThumb.isNullOrBlank() && (currentThumb.startsWith("http") || (File(currentThumb).exists() && File(currentThumb).length() > 0))) {
+            return@withContext currentThumb
+        }
+        val currentLocal = wallpaper.localPath
+        if (!currentLocal.isNullOrBlank() && (currentLocal.startsWith("http") || (File(currentLocal).exists() && File(currentLocal).length() > 0))) {
+            return@withContext currentLocal
+        }
+
+        val downloadedPath = telegramClient.fetchThumbnail(wallpaper.chatId, wallpaper.messageId)
+        if (!downloadedPath.isNullOrBlank()) {
+            wallpaperDao.updateThumbnailPath(wallpaper.id, downloadedPath)
+        }
+        downloadedPath
+    }
+
+    suspend fun getCacheSizeBytes(): Long = withContext(Dispatchers.IO) {
+        var total = 0L
+
+        fun getFolderSize(dir: File?): Long {
+            if (dir == null || !dir.exists()) return 0L
+            if (dir.isFile) return dir.length()
+            var size = 0L
+            val files = dir.listFiles() ?: return 0L
+            for (f in files) {
+                size += getFolderSize(f)
+            }
+            return size
+        }
+
+        total += getFolderSize(context.cacheDir)
+        context.externalCacheDir?.let { total += getFolderSize(it) }
+
+        val tdlibDir = File(context.filesDir, "tdlib")
+        if (tdlibDir.exists() && tdlibDir.isDirectory) {
+            val mediaFolders = listOf("files", "photos", "thumbnails", "documents")
+            for (folderName in mediaFolders) {
+                val folder = File(tdlibDir, folderName)
+                if (folder.exists()) {
+                    total += getFolderSize(folder)
+                }
+            }
+        }
+
+        total
+    }
+
+    suspend fun clearImageCache(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            // 1. Clear Coil memory and disk caches
+            try {
+                val loader = context.imageLoader
+                loader.diskCache?.clear()
+                loader.memoryCache?.clear()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing Coil cache", e)
+            }
+
+            // 2. Clear cacheDir
+            fun deleteContents(dir: File?) {
+                if (dir == null || !dir.exists()) return
+                val files = dir.listFiles() ?: return
+                for (f in files) {
+                    if (f.isDirectory) {
+                        f.deleteRecursively()
+                    } else {
+                        f.delete()
+                    }
+                }
+            }
+
+            deleteContents(context.cacheDir)
+
+            // 3. Clear externalCacheDir if present
+            deleteContents(context.externalCacheDir)
+
+            // 4. Clear downloaded TDLib media subfolders
+            val tdlibDir = File(context.filesDir, "tdlib")
+            if (tdlibDir.exists() && tdlibDir.isDirectory) {
+                val mediaFolders = listOf("files", "photos", "thumbnails", "documents")
+                for (folderName in mediaFolders) {
+                    val folder = File(tdlibDir, folderName)
+                    if (folder.exists()) {
+                        deleteContents(folder)
+                    }
+                }
+            }
+
+            // 5. Clear cached image paths in Room database
+            wallpaperDao.clearCachedPaths()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing image cache", e)
+            false
+        }
+    }
+
+    suspend fun clearAllData(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            wallpaperDao.clearWallpapers()
+            wallpaperDao.clearFavorites()
+            categoryDao.clearCategories()
+            clearImageCache()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing all data", e)
+            false
+        }
+    }
+
+    private fun WallpaperEntity.toDomain(): Wallpaper = Wallpaper(
+        id = id,
+        messageId = messageId,
+        chatId = chatId,
+        fileId = fileId ?: "",
+        fileName = fileName ?: "",
+        mimeType = mimeType ?: "image/jpeg",
+        sizeBytes = sizeBytes,
+        title = title ?: "Untitled",
+        category = category ?: "Uncategorized",
+        tags = if (tagsCsv.isNullOrBlank()) emptyList() else tagsCsv.split(","),
+        resolution = resolution ?: "1080x1920",
+        aspectRatio = aspectRatio ?: "9:16",
+        colors = if (colorsCsv.isNullOrBlank()) emptyList() else colorsCsv.split(","),
+        description = description ?: "",
+        author = author ?: "",
+        timestamp = timestamp,
+        localPath = localPath,
+        thumbnailPath = thumbnailPath,
+        isFavorite = isFavorite,
+        wallpaperType = wallpaperType?.takeIf { !it.isNullOrBlank() } ?: "Phone"
+    )
+
+    private fun WallpaperDocument.toEntity(
+        isFav: Boolean,
+        localPathOverride: String? = this.localPath,
+        thumbnailPathOverride: String? = this.thumbnailPath
+    ): WallpaperEntity = WallpaperEntity(
+        id = "${chatId}_${messageId}",
+        messageId = messageId,
+        chatId = chatId,
+        fileId = fileId ?: "",
+        fileName = fileName ?: "",
+        mimeType = mimeType ?: "image/jpeg",
+        sizeBytes = sizeBytes,
+        title = metadata.title ?: "Untitled",
+        category = metadata.category ?: "Uncategorized",
+        tagsCsv = metadata.tags?.joinToString(",") ?: "",
+        resolution = metadata.resolution ?: "1080x1920",
+        aspectRatio = metadata.aspectRatio ?: "9:16",
+        colorsCsv = metadata.colors?.joinToString(",") ?: "",
+        description = metadata.description ?: "",
+        author = metadata.author ?: "",
+        timestamp = metadata.timestamp,
+        localPath = localPathOverride,
+        thumbnailPath = thumbnailPathOverride,
+        isFavorite = isFav,
+        wallpaperType = metadata.wallpaperType?.takeIf { !it.isNullOrBlank() } ?: "Phone"
+    )
+}

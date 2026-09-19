@@ -1,0 +1,447 @@
+package me.jaival.telewalls.ui.navigation
+
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import me.jaival.telewalls.core.updater.UpdateState
+import androidx.compose.runtime.mutableStateOf
+import me.jaival.telewalls.ui.components.AnimatedBottomBar
+import me.jaival.telewalls.ui.dialogs.MassUploadDialog
+import me.jaival.telewalls.ui.dialogs.UpdateAvailableDialog
+import me.jaival.telewalls.ui.dialogs.WelcomeDialog
+import me.jaival.telewalls.ui.screens.account.AccountScreen
+import me.jaival.telewalls.ui.screens.auth.AuthScreen
+import me.jaival.telewalls.ui.screens.collections.CategoryDetailScreen
+import me.jaival.telewalls.ui.screens.collections.CollectionsScreen
+import me.jaival.telewalls.ui.screens.detail.DetailScreen
+import me.jaival.telewalls.ui.screens.favorites.FavoritesScreen
+import me.jaival.telewalls.ui.screens.home.HomeScreen
+import me.jaival.telewalls.ui.screens.onboarding.OnboardingScreen
+import me.jaival.telewalls.ui.screens.settings.LicensesScreen
+import me.jaival.telewalls.ui.screens.settings.SettingsScreen
+import me.jaival.telewalls.ui.screens.upload.UploadScreen
+import me.jaival.telewalls.viewmodel.AppUpdateViewModel
+import me.jaival.telewalls.viewmodel.AuthViewModel
+import me.jaival.telewalls.viewmodel.CategoryDetailViewModel
+import me.jaival.telewalls.viewmodel.CollectionsViewModel
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
+import me.jaival.telewalls.viewmodel.DetailViewModel
+import me.jaival.telewalls.viewmodel.HomeViewModel
+import me.jaival.telewalls.viewmodel.SettingsViewModel
+import me.jaival.telewalls.viewmodel.UploadViewModel
+
+@Composable
+fun TeleWallsNavGraph(
+    navController: NavHostController = rememberNavController(),
+    sharedUris: List<Uri>? = null,
+    onSharedUrisHandled: () -> Unit = {}
+) {
+    val context = LocalContext.current
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route ?: ScreenRoutes.HOME
+
+    var homeScrollToTopTrigger by remember { mutableIntStateOf(0) }
+    var collectionsScrollToTopTrigger by remember { mutableIntStateOf(0) }
+    var favoritesScrollToTopTrigger by remember { mutableIntStateOf(0) }
+    var batchUploadUris by remember { mutableStateOf<List<Uri>?>(null) }
+
+    val homeViewModel: HomeViewModel = hiltViewModel()
+    val collectionsViewModel: CollectionsViewModel = hiltViewModel()
+    val uploadViewModel: UploadViewModel = hiltViewModel()
+    val authViewModel: AuthViewModel = hiltViewModel()
+    val appUpdateViewModel: AppUpdateViewModel = hiltViewModel()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
+
+    val updateState by appUpdateViewModel.updateState.collectAsState()
+    val hasSeenWelcomeDialogState by settingsViewModel.hasSeenWelcomeDialog.collectAsState()
+    val categories by uploadViewModel.categories.collectAsState()
+
+    if (hasSeenWelcomeDialogState == false) {
+        WelcomeDialog(
+            onAccept = {
+                settingsViewModel.setHasSeenWelcomeDialog(true)
+                appUpdateViewModel.checkForUpdatesOnAppOpen()
+            }
+        )
+    }
+
+    UpdateAvailableDialog(
+        updateState = updateState,
+        onDismiss = { appUpdateViewModel.dismissUpdate() },
+        onInstallClick = {
+            (updateState as? UpdateState.UpdateAvailable)?.let {
+                appUpdateViewModel.startDownload(it.releaseInfo)
+            }
+        },
+        onInstallApkPrompt = {
+            appUpdateViewModel.promptInstallApk()
+        }
+    )
+
+    val isSetupCompletedState by authViewModel.isSetupCompleted.collectAsState()
+
+    if (isSetupCompletedState == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(
+                color = MaterialTheme.colorScheme.primary,
+                strokeWidth = 3.dp
+            )
+        }
+        return
+    }
+
+    val isSetupCompleted = isSetupCompletedState == true
+
+    androidx.compose.runtime.LaunchedEffect(sharedUris, isSetupCompleted) {
+        val uris = sharedUris
+        if (!uris.isNullOrEmpty() && isSetupCompleted) {
+            if (uris.size == 1) {
+                val singleUri = uris.first()
+                uploadViewModel.selectImage(context, singleUri)
+                navController.navigate(ScreenRoutes.uploadRoute()) {
+                    launchSingleTop = true
+                }
+            } else {
+                batchUploadUris = uris
+            }
+            onSharedUrisHandled()
+        }
+    }
+
+    if (batchUploadUris != null) {
+        MassUploadDialog(
+            initialUris = batchUploadUris!!,
+            categories = categories,
+            onDismissRequest = { batchUploadUris = null }
+        )
+    }
+
+    androidx.compose.runtime.LaunchedEffect(isSetupCompleted) {
+        if (!isSetupCompleted && currentRoute != ScreenRoutes.ONBOARDING) {
+            navController.navigate(ScreenRoutes.ONBOARDING) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    }
+
+    val showBottomBar = isSetupCompleted && currentRoute in listOf(
+        ScreenRoutes.HOME,
+        ScreenRoutes.COLLECTIONS,
+        ScreenRoutes.FAVORITES,
+        ScreenRoutes.SETTINGS
+    )
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            if (showBottomBar) {
+                AnimatedBottomBar(
+                    currentRoute = currentRoute,
+                    onNavigate = { route ->
+                        if (route != currentRoute) {
+                            val targetRoute = if (route == ScreenRoutes.HOME) ScreenRoutes.homeRoute() else route
+                            navController.navigate(targetRoute) {
+                                popUpTo(ScreenRoutes.HOME) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        } else {
+                            when (route) {
+                                ScreenRoutes.HOME -> homeScrollToTopTrigger++
+                                ScreenRoutes.COLLECTIONS -> collectionsScrollToTopTrigger++
+                                ScreenRoutes.FAVORITES -> favoritesScrollToTopTrigger++
+                            }
+                        }
+                    }
+                )
+            }
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = if (showBottomBar) innerPadding.calculateBottomPadding() else innerPadding.calculateBottomPadding())
+        ) {
+            NavHost(
+                navController = navController,
+                startDestination = if (isSetupCompleted) ScreenRoutes.homeRoute() else ScreenRoutes.ONBOARDING,
+                enterTransition = { fadeIn(animationSpec = tween(300)) },
+                exitTransition = { fadeOut(animationSpec = tween(300)) }
+            ) {
+                composable(ScreenRoutes.ONBOARDING) {
+                    OnboardingScreen(
+                        viewModel = authViewModel,
+                        onComplete = {
+                            navController.navigate(ScreenRoutes.homeRoute()) {
+                                popUpTo(ScreenRoutes.ONBOARDING) { inclusive = true }
+                            }
+                        }
+                    )
+                }
+
+                composable(
+                    route = ScreenRoutes.HOME,
+                    arguments = listOf(navArgument("q") { defaultValue = ""; type = NavType.StringType })
+                ) { backStackEntry ->
+                    val routeQuery = backStackEntry.arguments?.getString("q") ?: ""
+                    androidx.compose.runtime.LaunchedEffect(backStackEntry) {
+                        val savedQuery = backStackEntry.savedStateHandle.get<String>("query")
+                        val effectiveQuery = savedQuery ?: routeQuery
+                        if (effectiveQuery.isNotEmpty() && effectiveQuery != "{q}") {
+                            homeViewModel.selectCategory("All")
+                            homeViewModel.updateSearchQuery(effectiveQuery)
+                        } else {
+                            homeViewModel.updateSearchQuery("")
+                        }
+                    }
+                    val hasPreviousBackStack = navController.previousBackStackEntry != null
+                    HomeScreen(
+                        viewModel = homeViewModel,
+                        scrollToTopTrigger = homeScrollToTopTrigger,
+                        onWallpaperClick = { id ->
+                            navController.navigate(ScreenRoutes.detailRoute(id))
+                        },
+                        onSingleUploadClick = {
+                            navController.navigate(ScreenRoutes.uploadRoute())
+                        },
+                        onMultiUploadClick = {
+                            // MassUploadDialog is displayed directly on top of HomeScreen
+                        },
+                        onSearchQueryChange = { newQuery ->
+                            backStackEntry.savedStateHandle["query"] = newQuery
+                        },
+                        onBackClick = if (hasPreviousBackStack) {
+                            { navController.popBackStack() }
+                        } else null
+                    )
+                }
+
+                composable(ScreenRoutes.COLLECTIONS) {
+                    CollectionsScreen(
+                        viewModel = collectionsViewModel,
+                        scrollToTopTrigger = collectionsScrollToTopTrigger,
+                        onCollectionClick = { categoryName ->
+                            navController.navigate(ScreenRoutes.categoryDetailRoute(categoryName))
+                        }
+                    )
+                }
+
+                composable(
+                    route = ScreenRoutes.CATEGORY_DETAIL,
+                    arguments = listOf(navArgument("categoryName") { type = NavType.StringType }),
+                    enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Up, tween(350)) },
+                    exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Down, tween(350)) }
+                ) { backStackEntry ->
+                    val categoryDetailViewModel: CategoryDetailViewModel = hiltViewModel(backStackEntry)
+                    CategoryDetailScreen(
+                        viewModel = categoryDetailViewModel,
+                        onWallpaperClick = { id ->
+                            navController.navigate(ScreenRoutes.detailRoute(id))
+                        },
+                        onBackClick = { navController.popBackStack() }
+                    )
+                }
+
+                composable(ScreenRoutes.FAVORITES) {
+                    FavoritesScreen(
+                        viewModel = homeViewModel,
+                        scrollToTopTrigger = favoritesScrollToTopTrigger,
+                        onWallpaperClick = { id ->
+                            navController.navigate(ScreenRoutes.detailRoute(id))
+                        }
+                    )
+                }
+
+                composable(
+                    route = ScreenRoutes.UPLOAD,
+                    enterTransition = {
+                        slideIntoContainer(
+                            towards = AnimatedContentTransitionScope.SlideDirection.Up,
+                            animationSpec = tween(380)
+                        ) + fadeIn(animationSpec = tween(300))
+                    },
+                    exitTransition = {
+                        slideOutOfContainer(
+                            towards = AnimatedContentTransitionScope.SlideDirection.Down,
+                            animationSpec = tween(350)
+                        ) + fadeOut(animationSpec = tween(300))
+                    },
+                    popEnterTransition = {
+                        fadeIn(animationSpec = tween(300))
+                    },
+                    popExitTransition = {
+                        slideOutOfContainer(
+                            towards = AnimatedContentTransitionScope.SlideDirection.Down,
+                            animationSpec = tween(350)
+                        ) + fadeOut(animationSpec = tween(300))
+                    }
+                ) {
+                    UploadScreen(
+                        viewModel = uploadViewModel,
+                        onUploadSuccess = {
+                            navController.navigate(ScreenRoutes.homeRoute()) {
+                                popUpTo(ScreenRoutes.HOME) { inclusive = true }
+                            }
+                        },
+                        onBackClick = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
+
+                composable(
+                    route = ScreenRoutes.SETTINGS,
+                    enterTransition = {
+                        if (initialState.destination.route == ScreenRoutes.ACCOUNT) {
+                            slideIntoContainer(
+                                towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                                animationSpec = tween(350)
+                            ) + fadeIn(animationSpec = tween(300))
+                        } else {
+                            fadeIn(animationSpec = tween(300))
+                        }
+                    },
+                    exitTransition = {
+                        if (targetState.destination.route == ScreenRoutes.ACCOUNT) {
+                            slideOutOfContainer(
+                                towards = AnimatedContentTransitionScope.SlideDirection.Left,
+                                animationSpec = tween(350)
+                            ) + fadeOut(animationSpec = tween(300))
+                        } else {
+                            fadeOut(animationSpec = tween(300))
+                        }
+                    },
+                    popEnterTransition = {
+                        slideIntoContainer(
+                            towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                            animationSpec = tween(350)
+                        ) + fadeIn(animationSpec = tween(300))
+                    }
+                ) {
+                    SettingsScreen(
+                        authViewModel = authViewModel,
+                        updateViewModel = appUpdateViewModel,
+                        onAccountClick = {
+                            navController.navigate(ScreenRoutes.ACCOUNT)
+                        },
+                        onLicensesClick = {
+                            navController.navigate(ScreenRoutes.LICENSES)
+                        }
+                    )
+                }
+
+                composable(
+                    route = ScreenRoutes.ACCOUNT,
+                    enterTransition = {
+                        slideIntoContainer(
+                            towards = AnimatedContentTransitionScope.SlideDirection.Left,
+                            animationSpec = tween(350)
+                        ) + fadeIn(animationSpec = tween(300))
+                    },
+                    exitTransition = {
+                        slideOutOfContainer(
+                            towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                            animationSpec = tween(350)
+                        ) + fadeOut(animationSpec = tween(300))
+                    },
+                    popEnterTransition = {
+                        fadeIn(animationSpec = tween(300))
+                    },
+                    popExitTransition = {
+                        slideOutOfContainer(
+                            towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                            animationSpec = tween(350)
+                        ) + fadeOut(animationSpec = tween(300))
+                    }
+                ) {
+                    AccountScreen(
+                        authViewModel = authViewModel,
+                        onBackClick = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
+
+                composable(
+                    route = ScreenRoutes.LICENSES,
+                    enterTransition = {
+                        slideIntoContainer(
+                            towards = AnimatedContentTransitionScope.SlideDirection.Left,
+                            animationSpec = tween(350)
+                        ) + fadeIn(animationSpec = tween(300))
+                    },
+                    exitTransition = {
+                        slideOutOfContainer(
+                            towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                            animationSpec = tween(350)
+                        ) + fadeOut(animationSpec = tween(300))
+                    },
+                    popEnterTransition = {
+                        fadeIn(animationSpec = tween(300))
+                    },
+                    popExitTransition = {
+                        slideOutOfContainer(
+                            towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                            animationSpec = tween(350)
+                        ) + fadeOut(animationSpec = tween(300))
+                    }
+                ) {
+                    LicensesScreen(
+                        onBackClick = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
+
+                composable(
+                    route = ScreenRoutes.DETAIL,
+                    arguments = listOf(navArgument("wallpaperId") { type = NavType.StringType }),
+                    enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Up, tween(350)) },
+                    exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Down, tween(350)) }
+                ) { backStackEntry ->
+                    val wallpaperId = backStackEntry.arguments?.getString("wallpaperId") ?: ""
+                    val detailViewModel: DetailViewModel = hiltViewModel(backStackEntry)
+                    DetailScreen(
+                        wallpaperId = wallpaperId,
+                        viewModel = detailViewModel,
+                        onBackClick = { navController.popBackStack() },
+                        onColorClick = { colorHex ->
+                            navController.navigate(ScreenRoutes.homeRoute(colorHex))
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
