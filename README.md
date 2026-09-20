@@ -229,6 +229,13 @@ TeleWalls is built using **Kotlin** and **Jetpack Compose** following modern And
 
 ## Attributions & Credits
 
+This project is a modified fork of the original **TeleWalls** project by **Jaival-11**. Special thanks to Jaival-11 for creating the original application and open-source foundation that this project builds upon.
+
+- **Original repository:** https://github.com/jaival-11/TeleWalls
+- **Original author:** Jaival-11
+- This fork adds file-storage functionality, support for multiple file types, channel switching, file categories/extensions, and additional file browsing controls.
+
+
 This project stands on the shoulders of giants. A massive thank you to the developers, projects, and communities that make TeleWalls possible:
 
 ### 1. Telegram & TDLib
