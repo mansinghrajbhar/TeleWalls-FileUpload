@@ -161,7 +161,7 @@ object ImageUtils {
     private fun sanitizeFileName(name: String): String {
         return name
             .replace(Regex("[\\/:*?\"<>|]"), "_")
-            .replace(Regex("\s+"), " ")
+            .replace(Regex("\\s+"), " ")
             .trim()
     }
 }
