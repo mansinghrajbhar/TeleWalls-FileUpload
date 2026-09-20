@@ -150,7 +150,7 @@ fun DetailScreen(
 
     LaunchedEffect(downloadState) {
         if (downloadState is WallpaperDownloadState.Success) {
-            Toast.makeText(context, if (currentWall?.mimeType?.startsWith("image/") == true) "Wallpaper saved to Gallery!" else "File saved to Downloads/TeleFiles!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, if (wallpaper?.mimeType?.startsWith("image/") == true) "Wallpaper saved to Gallery!" else "File saved to Downloads/TeleFiles!", Toast.LENGTH_SHORT).show()
             viewModel.resetDownloadState()
         } else if (downloadState is WallpaperDownloadState.Error) {
             Toast.makeText(context, (downloadState as WallpaperDownloadState.Error).message, Toast.LENGTH_SHORT).show()
