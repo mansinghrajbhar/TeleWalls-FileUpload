@@ -1138,5 +1138,4 @@ fun DetailScreen(
         )
     }
 }
-
-
+}
