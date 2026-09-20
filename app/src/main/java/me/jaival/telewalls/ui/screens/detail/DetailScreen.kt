@@ -150,7 +150,7 @@ fun DetailScreen(
 
     LaunchedEffect(downloadState) {
         if (downloadState is WallpaperDownloadState.Success) {
-            Toast.makeText(context, "Wallpaper saved to Gallery!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, if (currentWall?.mimeType?.startsWith("image/") == true) "Wallpaper saved to Gallery!" else "File saved to Downloads/TeleFiles!", Toast.LENGTH_SHORT).show()
             viewModel.resetDownloadState()
         } else if (downloadState is WallpaperDownloadState.Error) {
             Toast.makeText(context, (downloadState as WallpaperDownloadState.Error).message, Toast.LENGTH_SHORT).show()
@@ -377,7 +377,7 @@ fun DetailScreen(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = "Unable to load wallpaper",
+                                text = if (isImageFile) "Unable to load image" else "Unable to load file",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     color = Color.White.copy(alpha = 0.7f),
                                     fontWeight = FontWeight.SemiBold
