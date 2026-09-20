@@ -317,7 +317,8 @@ fun UploadScreen(
 
             // Wallpaper Type Dropdown
             var wallpaperTypeExpanded by remember { mutableStateOf(false) }
-            val wallpaperTypeOptions = listOf("Auto-detect", "Phone", "Desktop/Tablet")
+            val isSelectedImage = selectedMimeType.startsWith("image/")
+            val wallpaperTypeOptions = if (isSelectedImage) listOf("Auto-detect", "Phone", "Desktop/Tablet") else listOf("File")
             val selectedWallpaperType by viewModel.selectedWallpaperType.collectAsState()
 
             val displayWallpaperType = when (selectedWallpaperType) {
@@ -331,7 +332,7 @@ fun UploadScreen(
                     value = displayWallpaperType,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Wallpaper Type") },
+                    label = { Text(if (isSelectedImage) "Wallpaper Type" else "File Type") },
                     trailingIcon = {
                         Icon(
                             imageVector = Icons.Default.ArrowDropDown,
