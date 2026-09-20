@@ -62,6 +62,9 @@ class UploadViewModel @Inject constructor(
     private val _selectedFileName = MutableStateFlow<String?>(null)
     val selectedFileName: StateFlow<String?> = _selectedFileName.asStateFlow()
 
+    private val _selectedMimeType = MutableStateFlow("application/octet-stream")
+    val selectedMimeType: StateFlow<String> = _selectedMimeType.asStateFlow()
+
     private val _detectedResolution = MutableStateFlow("1440x3200")
     val detectedResolution: StateFlow<String> = _detectedResolution.asStateFlow()
 
@@ -121,6 +124,7 @@ class UploadViewModel @Inject constructor(
         _selectedFileName.value = extractedFileName
 
         val mimeType = getMimeTypeFromUri(context, uri).orEmpty().lowercase()
+        _selectedMimeType.value = mimeType.ifBlank { "application/octet-stream" }
         val isImage = mimeType.startsWith("image/")
 
         if (!isImage) {
