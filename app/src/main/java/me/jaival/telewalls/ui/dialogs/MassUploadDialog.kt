@@ -224,7 +224,7 @@ fun MassUploadDialog(
                 } else if (selectedUris.isEmpty()) {
                     // Initial Selection State (Prompt to pick photos or folder)
                     Text(
-                        text = "Batch Upload Wallpapers",
+                        text = "Batch Upload Files",
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -258,7 +258,7 @@ fun MassUploadDialog(
                     // Selection Card 2: Folder
                     SelectionOptionCard(
                         title = "Select Folder",
-                        subtitle = "Upload all wallpapers in a folder",
+                        subtitle = "Upload all files in a folder",
                         icon = Icons.Filled.FolderOpen,
                         primaryColor = primaryColor,
                         onClick = { folderLauncher.launch(null) }
@@ -438,7 +438,7 @@ fun MassUploadDialog(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "Add common details for all ${selectedUris.size} wallpapers.",
+                        text = "Add common details for all ${selectedUris.size} files.",
                         style = MaterialTheme.typography.bodyMedium.copy(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
