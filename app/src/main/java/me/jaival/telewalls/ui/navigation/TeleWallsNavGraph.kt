@@ -37,7 +37,6 @@ import me.jaival.telewalls.ui.dialogs.WelcomeDialog
 import me.jaival.telewalls.ui.screens.account.AccountScreen
 import me.jaival.telewalls.ui.screens.auth.AuthScreen
 import me.jaival.telewalls.ui.screens.collections.CategoryDetailScreen
-import me.jaival.telewalls.ui.screens.collections.CollectionsScreen
 import me.jaival.telewalls.ui.screens.detail.DetailScreen
 import me.jaival.telewalls.ui.screens.favorites.FavoritesScreen
 import me.jaival.telewalls.ui.screens.home.HomeScreen
@@ -48,7 +47,6 @@ import me.jaival.telewalls.ui.screens.upload.UploadScreen
 import me.jaival.telewalls.viewmodel.AppUpdateViewModel
 import me.jaival.telewalls.viewmodel.AuthViewModel
 import me.jaival.telewalls.viewmodel.CategoryDetailViewModel
-import me.jaival.telewalls.viewmodel.CollectionsViewModel
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import me.jaival.telewalls.viewmodel.DetailViewModel
@@ -72,7 +70,6 @@ fun TeleWallsNavGraph(
     var batchUploadUris by remember { mutableStateOf<List<Uri>?>(null) }
 
     val homeViewModel: HomeViewModel = hiltViewModel()
-    val collectionsViewModel: CollectionsViewModel = hiltViewModel()
     val uploadViewModel: UploadViewModel = hiltViewModel()
     val authViewModel: AuthViewModel = hiltViewModel()
     val appUpdateViewModel: AppUpdateViewModel = hiltViewModel()
@@ -248,13 +245,16 @@ fun TeleWallsNavGraph(
                     )
                 }
 
-                composable(ScreenRoutes.COLLECTIONS) {
-                    CollectionsScreen(
-                        viewModel = collectionsViewModel,
-                        scrollToTopTrigger = collectionsScrollToTopTrigger,
-                        onCollectionClick = { categoryName ->
-                            navController.navigate(ScreenRoutes.categoryDetailRoute(categoryName))
-                        }
+                composable(ScreenRoutes.COLLECTIONS) { backStackEntry ->
+                    val categoryDetailViewModel: CategoryDetailViewModel = hiltViewModel(backStackEntry)
+                    CategoryDetailScreen(
+                        viewModel = categoryDetailViewModel,
+                        onWallpaperClick = { id ->
+                            navController.navigate(ScreenRoutes.detailRoute(id))
+                        },
+                        onBackClick = { },
+                        showBackButton = false,
+                        scrollToTopTrigger = collectionsScrollToTopTrigger
                     )
                 }
 
