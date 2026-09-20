@@ -204,6 +204,7 @@ class WallpaperRepository @Inject constructor(
             val categoriesCount = catResult.getOrDefault(0)
             val wallpapersCount = wpResult.getOrDefault(0)
             val favoritesCount = favResult.getOrDefault(0)
+            settingsRepository.setLastChannelSyncTime(chatId)
             if (BuildConfig.DEBUG) {
                 Log.d(TAG, "[REINDEX DEBUG] Reindex finished successfully: $wallpapersCount wallpapers, $categoriesCount categories, $favoritesCount favorites for chatId=$chatId")
             }
@@ -719,6 +720,13 @@ class WallpaperRepository @Inject constructor(
             wallpaperDao.updateThumbnailPath(wallpaper.id, downloadedPath)
         }
         downloadedPath
+    }
+
+    suspend fun preloadThumbnails(limit: Int = 12) = withContext(Dispatchers.IO) {
+        val cached = allWallpapers.firstOrNull().orEmpty().sortedByDescending { it.timestamp }.take(limit)
+        cached.forEach { wallpaper ->
+            try { loadThumbnailOnDemand(wallpaper) } catch (e: Exception) { Log.d(TAG, "Thumbnail preload skipped: ${e.message}") }
+        }
     }
 
     suspend fun getCacheSizeBytes(): Long = withContext(Dispatchers.IO) {
