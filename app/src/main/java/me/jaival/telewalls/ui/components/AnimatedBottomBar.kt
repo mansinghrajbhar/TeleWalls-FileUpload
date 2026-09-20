@@ -65,7 +65,7 @@ data class NavItem(
 
 val defaultBottomNavItems = listOf(
     NavItem(ScreenRoutes.HOME, "Home", Icons.Filled.Home, Icons.Outlined.Home),
-    NavItem(ScreenRoutes.COLLECTIONS, "Collections", Icons.Filled.GridView, Icons.Outlined.GridView),
+    NavItem(ScreenRoutes.COLLECTIONS, "Categories", Icons.Filled.GridView, Icons.Outlined.GridView),
     NavItem(ScreenRoutes.FAVORITES, "Favorites", Icons.Filled.Favorite, Icons.Outlined.FavoriteBorder),
     NavItem(ScreenRoutes.SETTINGS, "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 )
