@@ -28,6 +28,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
@@ -114,12 +116,14 @@ fun AnimatedWallpaperCard(
     )
 
     val coroutineScope = rememberCoroutineScope()
-    val imageModel = remember(wallpaper.localPath, wallpaper.thumbnailPath) {
-        ImageUtils.resolveImageModel(wallpaper.localPath, wallpaper.thumbnailPath)
+    val isImageFile = wallpaper.mimeType.lowercase().startsWith("image/")
+    val fileExtension = wallpaper.fileName.substringAfterLast('.', "").takeIf { it.isNotBlank() }?.uppercase() ?: "FILE"
+    val imageModel = remember(wallpaper.localPath, wallpaper.thumbnailPath, isImageFile) {
+        if (isImageFile) ImageUtils.resolveImageModel(wallpaper.localPath, wallpaper.thumbnailPath) else null
     }
 
-    LaunchedEffect(wallpaper.id, imageModel) {
-        if (imageModel == null) {
+    LaunchedEffect(wallpaper.id, imageModel, isImageFile) {
+        if (isImageFile && imageModel == null) {
             onLoadThumbnail(wallpaper)
         }
     }
@@ -157,25 +161,53 @@ fun AnimatedWallpaperCard(
                 onLongClick = onLongClick
             )
     ) {
-        if (imageModel != null) {
+        if (isImageFile && imageModel != null) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(imageModel)
                     .crossfade(true)
                     .build(),
-                contentDescription = wallpaper.title,
+                contentDescription = wallpaper.fileName.ifBlank { wallpaper.title },
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(0.65f),
                 contentScale = ContentScale.Crop
             )
-        } else {
+        } else if (isImageFile) {
             ShimmerCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(0.65f),
                 aspectRatio = 0.65f
             )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(0.65f)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Description,
+                        contentDescription = "File",
+                        tint = primaryColor,
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = fileExtension,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            color = primaryColor,
+                            fontWeight = FontWeight.Black
+                        )
+                    )
+                }
+            }
         }
 
         // Selection overlay background
@@ -288,7 +320,7 @@ fun AnimatedWallpaperCard(
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = wallpaper.resolution,
+                        text = if (isImageFile) wallpaper.resolution else fileExtension,
                         style = MaterialTheme.typography.labelSmall.copy(
                             color = Color.White.copy(alpha = 0.7f),
                             fontSize = 10.sp
