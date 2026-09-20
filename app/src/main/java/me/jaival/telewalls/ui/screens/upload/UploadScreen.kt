@@ -110,7 +110,7 @@ fun UploadScreen(
 
     LaunchedEffect(uploadState) {
         if (uploadState is UploadState.Success) {
-            Toast.makeText(context, "Wallpaper uploaded to Telegram channel!", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "File uploaded to Telegram channel!", Toast.LENGTH_LONG).show()
             viewModel.resetState()
             title = ""
             author = ""
@@ -206,7 +206,7 @@ fun UploadScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
                             imageVector = Icons.Filled.AddPhotoAlternate,
-                            contentDescription = "Pick Photo",
+                            contentDescription = "Pick File",
                             tint = primaryColor,
                             modifier = Modifier.size(48.dp)
                         )
