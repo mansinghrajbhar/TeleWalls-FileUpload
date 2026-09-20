@@ -228,6 +228,7 @@ fun TeleWallsNavGraph(
                     val hasPreviousBackStack = navController.previousBackStackEntry != null
                     HomeScreen(
                         viewModel = homeViewModel,
+                        authViewModel = authViewModel,
                         scrollToTopTrigger = homeScrollToTopTrigger,
                         onWallpaperClick = { id ->
                             navController.navigate(ScreenRoutes.detailRoute(id))
