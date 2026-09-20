@@ -313,6 +313,40 @@ fun DetailScreen(
                             )
                         }
                     }
+                } else if (!isImageFile) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Description,
+                                contentDescription = "File",
+                                tint = primaryColor,
+                                modifier = Modifier.size(96.dp)
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Text(
+                                text = currentWall.fileName.ifBlank { currentWall.title },
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = currentWall.mimeType.ifBlank { "Unknown file type" },
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    color = Color.White.copy(alpha = 0.65f)
+                                )
+                            )
+                        }
+                    }
                 } else if (imageModel != null) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         AsyncImage(
@@ -357,7 +391,7 @@ fun DetailScreen(
                             }
                         }
                     }
-                }
+                }                }
             }
         }
 
