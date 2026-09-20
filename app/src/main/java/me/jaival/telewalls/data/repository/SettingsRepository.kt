@@ -35,6 +35,7 @@ class SettingsRepository @Inject constructor(
         private val SYNC_FAVORITES_KEY = booleanPreferencesKey("sync_favorites")
         private val LAST_UPDATE_CHECK_TIME_KEY = longPreferencesKey("last_update_check_time_ms")
         private val HAS_SEEN_WELCOME_DIALOG_KEY = booleanPreferencesKey("has_seen_welcome_dialog")
+        private fun lastChannelSyncKey(chatId: Long) = longPreferencesKey("last_channel_sync_$chatId")
     }
 
     val hasSeenWelcomeDialogFlow: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
@@ -137,6 +138,10 @@ class SettingsRepository @Inject constructor(
             prefs.clear()
         }
     }
+
+    suspend fun getLastChannelSyncTime(chatId: Long): Long = context.settingsDataStore.data.map { prefs -> prefs[lastChannelSyncKey(chatId)] ?: 0L }.first()
+
+    suspend fun setLastChannelSyncTime(chatId: Long, timestamp: Long = System.currentTimeMillis()) { context.settingsDataStore.edit { prefs -> prefs[lastChannelSyncKey(chatId)] = timestamp } }
 
     suspend fun getLastUpdateCheckTime(): Long {
         return context.settingsDataStore.data.map { prefs ->
