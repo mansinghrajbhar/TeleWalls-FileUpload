@@ -60,7 +60,9 @@ import me.jaival.telewalls.viewmodel.CategoryDetailViewModel
 fun CategoryDetailScreen(
     viewModel: CategoryDetailViewModel,
     onWallpaperClick: (String) -> Unit,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    showBackButton: Boolean = true,
+    scrollToTopTrigger: Int = 0
 ) {
     val context = LocalContext.current
     val wallpapers by viewModel.wallpapers.collectAsState()
@@ -86,6 +88,12 @@ fun CategoryDetailScreen(
 
     BackHandler(enabled = isSelectionMode) {
         selectedWallpaperIds = emptySet()
+    }
+
+    LaunchedEffect(scrollToTopTrigger) {
+        if (scrollToTopTrigger > 0) {
+            gridState.animateScrollToItem(0)
+        }
     }
 
     LaunchedEffect(gridState.isScrollInProgress) {
@@ -133,11 +141,13 @@ fun CategoryDetailScreen(
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back"
-                            )
+                        if (showBackButton) {
+                            IconButton(onClick = onBackClick) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back"
+                                )
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
