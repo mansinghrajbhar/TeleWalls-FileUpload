@@ -77,10 +77,12 @@ import me.jaival.telewalls.ui.components.ShimmerCard
 import me.jaival.telewalls.ui.dialogs.BatchEditDialog
 import me.jaival.telewalls.ui.dialogs.MassUploadDialog
 import me.jaival.telewalls.viewmodel.HomeViewModel
+import me.jaival.telewalls.viewmodel.AuthViewModel
 
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
+    authViewModel: AuthViewModel,
     onWallpaperClick: (String) -> Unit,
     onSingleUploadClick: () -> Unit = {},
     onMultiUploadClick: () -> Unit = {},
@@ -94,6 +96,10 @@ fun HomeScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val wallpapers by viewModel.wallpapers.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val channels by authViewModel.channels.collectAsState()
+    val activeChannelId by authViewModel.activeChannelId.collectAsState()
+    val isChannelLoading by authViewModel.isLoading.collectAsState()
+    var showChannelDialog by remember { mutableStateOf(false) }
     val primaryColor = MaterialTheme.colorScheme.primary
 
     var showMassUploadDialog by remember { mutableStateOf(false) }
@@ -157,6 +163,7 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         isFabClicked = false
+        authViewModel.loadStorageChannels()
     }
 
     val fabIconRotation by animateFloatAsState(
@@ -212,7 +219,7 @@ fun HomeScreen(
                     ) {
                         Column {
                             Text(
-                                text = "TeleWalls",
+                                text = "TeleFiles",
                                 style = MaterialTheme.typography.headlineMedium.copy(
                                     color = MaterialTheme.colorScheme.onBackground,
                                     fontWeight = FontWeight.Black,
@@ -220,7 +227,7 @@ fun HomeScreen(
                                 )
                             )
                             Text(
-                                text = "Personal Wallpaper Gallery",
+                                text = "Personal File & Wallpaper Storage",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     color = primaryColor,
                                     fontWeight = FontWeight.SemiBold
@@ -228,16 +235,16 @@ fun HomeScreen(
                             )
                         }
 
-                        // Vault Sync Status Indicator
+                        // Active Telegram channel selector
                         Box(
                             modifier = Modifier
-                                .clip(CircleShape)
+                                .clip(RoundedCornerShape(18.dp))
                                 .background(MaterialTheme.colorScheme.surfaceContainer)
-                                .clickable { viewModel.reindexChannel() }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .clickable { showChannelDialog = true }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (isRefreshing) {
+                                if (isRefreshing || isChannelLoading) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(14.dp),
                                         color = primaryColor,
@@ -246,18 +253,22 @@ fun HomeScreen(
                                 } else {
                                     Icon(
                                         imageVector = Icons.Filled.CloudDone,
-                                        contentDescription = "Reindex from channel",
+                                        contentDescription = "Select channel",
                                         tint = primaryColor,
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(6.dp))
+                                val activeTitle = channels.firstOrNull { it.chatId == activeChannelId }?.title
+                                    ?.removePrefix("TeleWalls")?.trim()
+                                    ?: "Select Channel"
                                 Text(
-                                    text = if (isRefreshing) "Reindexing..." else "Telegram",
+                                    text = activeTitle,
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         color = MaterialTheme.colorScheme.onSurface,
                                         fontSize = 11.sp
-                                    )
+                                    ),
+                                    maxLines = 1
                                 )
                             }
                         }
@@ -349,7 +360,7 @@ fun HomeScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = if (searchQuery.isNotBlank()) "No Matching Wallpapers" else "No Wallpapers Found",
+                                text = if (searchQuery.isNotBlank()) "No Matching Files" else "No Files Found",
                                 style = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onBackground)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
@@ -357,7 +368,7 @@ fun HomeScreen(
                                 text = if (searchQuery.isNotBlank())
                                     "Try broadening your search or use fewer keywords"
                                 else
-                                    "Upload some wallpapers",
+                                    "Upload some files",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center
@@ -495,5 +506,56 @@ fun HomeScreen(
                 )
             }
         }
+
+            if (showChannelDialog) {
+                AlertDialog(
+                    onDismissRequest = { showChannelDialog = false },
+                    title = { Text("Select Storage Channel", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column {
+                            if (channels.isEmpty()) {
+                                Text(
+                                    text = if (isChannelLoading) "Loading channels..." else "No TeleFiles channels found. Create one from Account.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                channels.forEach { channel ->
+                                    val selected = channel.chatId == activeChannelId
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(if (selected) primaryColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainer)
+                                            .clickable {
+                                                showChannelDialog = false
+                                                if (!selected) authViewModel.switchChannel(channel.chatId)
+                                            }
+                                            .padding(14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = channel.title.removePrefix("TeleWalls").trim().ifBlank { channel.title },
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                text = channel.documentCount.toString() + " files",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (selected) {
+                                            Icon(Icons.Filled.CloudDone, contentDescription = "Selected", tint = primaryColor)
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { showChannelDialog = false }) { Text("Close") } },
+                    shape = RoundedCornerShape(24.dp)
+                )
+            }
     }
 }
