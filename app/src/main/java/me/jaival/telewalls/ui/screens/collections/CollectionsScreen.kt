@@ -90,7 +90,6 @@ fun CollectionsScreen(
     val context = LocalContext.current
     val collections by viewModel.collections.collectAsState()
     val categories by viewModel.categories.collectAsState()
-    var showManageSheet by remember { mutableStateOf(false) }
 
     val gridState = rememberLazyGridState()
     var isInitialTabOpen by remember { mutableStateOf(true) }
@@ -130,7 +129,7 @@ fun CollectionsScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Collections",
+                        text = "Categories",
                         style = MaterialTheme.typography.headlineMedium.copy(
                             color = MaterialTheme.colorScheme.onBackground,
                             fontWeight = FontWeight.Black,
@@ -138,7 +137,7 @@ fun CollectionsScreen(
                         )
                     )
                     Text(
-                        text = "Explore wallpapers by category",
+                        text = "Browse files by category",
                         style = MaterialTheme.typography.labelSmall.copy(
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold
@@ -146,31 +145,6 @@ fun CollectionsScreen(
                     )
                 }
 
-                Surface(
-                    onClick = { showManageSheet = true },
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Tune,
-                            contentDescription = "Manage Categories",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Manage",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
-                        )
-                    }
-                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -182,12 +156,12 @@ fun CollectionsScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "No Collections Found",
+                            text = "No Categories Found",
                             style = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onBackground)
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "You can create categories from manage option above",
+                            text = "Upload files to build categories automatically",
                             style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
                         )
                     }
@@ -213,17 +187,6 @@ fun CollectionsScreen(
             }
         }
 
-        if (showManageSheet) {
-            ManageCategoriesBottomSheet(
-                categories = categories,
-                onMoveUp = { viewModel.moveCategoryUp(it) },
-                onMoveDown = { viewModel.moveCategoryDown(it) },
-                onDeleteCategory = { viewModel.deleteCategory(it) },
-                onRenameCategory = { oldName, newName -> viewModel.renameCategory(oldName, newName) },
-                onAddCategory = { viewModel.addCategory(it) },
-                onDismiss = { showManageSheet = false }
-            )
-        }
     }
 }
 
