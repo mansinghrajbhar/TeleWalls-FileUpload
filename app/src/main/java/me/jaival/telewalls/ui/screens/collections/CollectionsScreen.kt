@@ -714,7 +714,7 @@ fun CollectionCard(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "COLLECTION",
+                text = "CATEGORY",
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontWeight = FontWeight.Bold,
                     fontSize = 10.sp,
@@ -741,7 +741,7 @@ fun CollectionCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${collection.wallpaperCount} Wallpapers",
+                        text = "${collection.wallpaperCount} Files",
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.Medium,
                             fontSize = 11.sp
