@@ -119,17 +119,30 @@ class UploadViewModel @Inject constructor(
         _selectedImageUri.value = uri
         val extractedFileName = getFileNameFromUri(context, uri)
         _selectedFileName.value = extractedFileName
+
+        val mimeType = getMimeTypeFromUri(context, uri).orEmpty().lowercase()
+        val isImage = mimeType.startsWith("image/")
+
+        if (!isImage) {
+            _detectedResolution.value = "File"
+            _detectedColors.value = emptyList()
+            return
+        }
+
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 context.contentResolver.openInputStream(uri)?.use { inputStream ->
                     val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     BitmapFactory.decodeStream(inputStream, null, options)
-                    _detectedResolution.value = "${options.outWidth}x${options.outHeight}"
+                    if (options.outWidth > 0 && options.outHeight > 0) {
+                        _detectedResolution.value = options.outWidth.toString() + "x" + options.outHeight
+                    }
                 }
                 val colors = PaletteExtractor.extractColorsFromUri(context, uri)
                 _detectedColors.value = colors.hexList
             } catch (e: Exception) {
-                _detectedResolution.value = "1080x1920"
+                _detectedResolution.value = "Unknown"
+                _detectedColors.value = emptyList()
             }
         }
     }
