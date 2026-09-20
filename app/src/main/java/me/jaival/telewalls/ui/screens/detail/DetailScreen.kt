@@ -727,7 +727,6 @@ fun DetailScreen(
                     }                }
             }
         }
-    }
 
     // Wallpaper Target Dialog
     if (showApplyDialog) {
