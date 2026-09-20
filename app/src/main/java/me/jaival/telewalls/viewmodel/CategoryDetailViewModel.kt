@@ -21,7 +21,7 @@ class CategoryDetailViewModel @Inject constructor(
 
     val categoryName: String = savedStateHandle.get<String>("categoryName")?.let {
         Uri.decode(it)
-    } ?: "Category"
+    } ?: "All"
 
     val wallpapers: StateFlow<List<Wallpaper>> = wallpaperRepository
         .getWallpapersByCategory(categoryName)
