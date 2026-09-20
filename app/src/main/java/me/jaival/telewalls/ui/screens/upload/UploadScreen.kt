@@ -28,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material3.AlertDialog
@@ -80,6 +81,7 @@ fun UploadScreen(
     val categories by viewModel.categories.collectAsState()
     val selectedUri by viewModel.selectedImageUri.collectAsState()
     val selectedFileName by viewModel.selectedFileName.collectAsState()
+    val selectedMimeType by viewModel.selectedMimeType.collectAsState()
     val detectedResolution by viewModel.detectedResolution.collectAsState()
     val detectedColors by viewModel.detectedColors.collectAsState()
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -181,12 +183,43 @@ fun UploadScreen(
                 contentAlignment = Alignment.Center
             ) {
                 if (selectedUri != null) {
-                    AsyncImage(
-                        model = selectedUri,
-                        contentDescription = "Selected Photo",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+                    val isImageFile = selectedMimeType.startsWith("image/")
+                    val extension = selectedFileName?.substringAfterLast(".", "")?.takeIf { it.isNotBlank() }?.uppercase() ?: "FILE"
+                    if (isImageFile) {
+                        AsyncImage(
+                            model = selectedUri,
+                            contentDescription = "Selected image",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Description,
+                                contentDescription = "Selected file",
+                                tint = primaryColor,
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = extension,
+                                color = primaryColor,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = selectedFileName ?: "Selected file",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -196,7 +229,7 @@ fun UploadScreen(
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = detectedResolution,
+                            text = if (isImageFile) detectedResolution else extension,
                             color = primaryColor,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
