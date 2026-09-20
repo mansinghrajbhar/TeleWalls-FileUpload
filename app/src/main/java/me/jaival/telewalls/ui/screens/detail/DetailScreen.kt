@@ -647,49 +647,83 @@ fun DetailScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Apply Action Buttons
+                    // Apply / Download Actions
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Button(
-                            onClick = { showApplyDialog = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(52.dp),
-                            shape = RoundedCornerShape(26.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = primaryColor,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            if (applyState is WallpaperApplyState.Applying) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
-                            } else {
-                                Icon(imageVector = Icons.Filled.Wallpaper, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(text = "Apply Wallpaper", fontWeight = FontWeight.Bold)
+                        if (isImageFile) {
+                            Button(
+                                onClick = { showApplyDialog = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = primaryColor,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                if (applyState is WallpaperApplyState.Applying) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                } else {
+                                    Icon(imageVector = Icons.Filled.Wallpaper, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(text = "Apply Wallpaper", fontWeight = FontWeight.Bold)
+                                }
                             }
-                        }
 
-                        IconButton(
-                            onClick = {
-                                viewModel.downloadWallpaperToGallery(context)
-                            },
-                            enabled = downloadState !is WallpaperDownloadState.Downloading,
-                            modifier = Modifier
-                                .size(52.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceContainer)
-                        ) {
-                            if (downloadState is WallpaperDownloadState.Downloading) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-                            } else {
-                                Icon(imageVector = Icons.Filled.Download, contentDescription = "Download", tint = Color.White)
+                            IconButton(
+                                onClick = { viewModel.downloadWallpaperToGallery(context) },
+                                enabled = downloadState !is WallpaperDownloadState.Downloading,
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                            ) {
+                                if (downloadState is WallpaperDownloadState.Downloading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Filled.Download,
+                                        contentDescription = "Download wallpaper",
+                                        tint = Color.White
+                                    )
+                                }
+                            }
+                        } else {
+                            Button(
+                                onClick = { viewModel.downloadWallpaperToGallery(context) },
+                                enabled = downloadState !is WallpaperDownloadState.Downloading,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = primaryColor,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                if (downloadState is WallpaperDownloadState.Downloading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                } else {
+                                    Icon(imageVector = Icons.Filled.Download, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(text = "Download File", fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
-                    }
-                }
+                    }                }
             }
         }
     }
