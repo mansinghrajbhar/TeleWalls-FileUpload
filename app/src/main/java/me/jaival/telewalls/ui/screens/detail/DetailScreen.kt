@@ -394,7 +394,6 @@ fun DetailScreen(
                     }
                 }                }
             }
-        }
 
         // Subtle gradient overlay for readability (fades out when controls are hidden)
         AnimatedVisibility(
