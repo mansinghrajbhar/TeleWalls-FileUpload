@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -31,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -60,6 +64,17 @@ fun CategoryDetailScreen(
     val categories by viewModel.categories.collectAsState()
     val gridState = rememberLazyGridState()
     var isInitialTabOpen by remember { mutableStateOf(true) }
+    var selectedExtension by remember { mutableStateOf("ALL") }
+
+    fun extensionOf(file: Wallpaper): String {
+        return file.fileName.substringAfterLast(".", "").takeIf { it.isNotBlank() }?.uppercase()
+            ?: if (file.mimeType.startsWith("image/")) "IMG" else "FILE"
+    }
+
+    val extensionCounts = remember(wallpapers) {
+        wallpapers.groupingBy { extensionOf(it) }.eachCount().toList().sortedByDescending { it.second }
+    }
+    val visibleWallpapers = if (selectedExtension == "ALL") wallpapers else wallpapers.filter { extensionOf(it) == selectedExtension }
 
     var selectedWallpaperIds by remember { mutableStateOf(setOf<String>()) }
     var showBatchEditDialog by remember { mutableStateOf(false) }
@@ -81,13 +96,13 @@ fun CategoryDetailScreen(
             if (isSelectionMode) {
                 BatchSelectionHeader(
                     selectedCount = selectedWallpaperIds.size,
-                    totalCount = wallpapers.size,
+                    totalCount = visibleWallpapers.size,
                     onClearSelection = { selectedWallpaperIds = emptySet() },
                     onSelectAllToggle = {
                         if (selectedWallpaperIds.size == wallpapers.size) {
                             selectedWallpaperIds = emptySet()
                         } else {
-                            selectedWallpaperIds = wallpapers.map { it.id }.toSet()
+                            selectedWallpaperIds = visibleWallpapers.map { it.id }.toSet()
                         }
                     },
                     onEditClick = { showBatchEditDialog = true },
@@ -107,7 +122,7 @@ fun CategoryDetailScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "${wallpapers.size} Wallpapers",
+                                text = "${wallpapers.size} Files",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -131,11 +146,37 @@ fun CategoryDetailScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            if (extensionCounts.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val filters = listOf("ALL" to wallpapers.size) + extensionCounts
+                    filters.forEach { (extension, count) ->
+                        val selected = selectedExtension == extension
+                        Text(
+                            text = if (extension == "ALL") "All • " + count else extension + " • " + count,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .clickable { selectedExtension = extension }
+                                .padding(horizontal = 14.dp, vertical = 9.dp),
+                            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
+            }
+
+            Box(modifier = Modifier.fillMaxSize()) {
             if (wallpapers.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -143,15 +184,19 @@ fun CategoryDetailScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "No Wallpapers in ${viewModel.categoryName}",
+                            text = "No Files in " + viewModel.categoryName,
                             style = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onBackground)
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Add new wallpapers to this category!",
+                            text = "Add files to this category to see them here.",
                             style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
                         )
                     }
+                }
+            } else if (visibleWallpapers.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No " + selectedExtension.lowercase() + " files in this category.")
                 }
             } else {
                 LazyVerticalGrid(
@@ -161,7 +206,7 @@ fun CategoryDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    itemsIndexed(wallpapers, key = { _, item -> item.id }) { index, wallpaper ->
+                    itemsIndexed(visibleWallpapers, key = { _, item -> item.id }) { index, wallpaper ->
                         val isSelected = wallpaper.id in selectedWallpaperIds
                         AnimatedWallpaperCard(
                             wallpaper = wallpaper,
@@ -193,7 +238,7 @@ fun CategoryDetailScreen(
                     onDismissRequest = { showBatchEditDialog = false },
                     onSave = { author, wallpaperType, selectedCategory, tags ->
                         showBatchEditDialog = false
-                        val selectedWallpapers = wallpapers.filter { it.id in selectedWallpaperIds }
+                        val selectedWallpapers = visibleWallpapers.filter { it.id in selectedWallpaperIds }
                         val tagsList = tags.split(",").map { it.trim() }.filter { it.isNotBlank() }
                         viewModel.batchUpdateWallpapers(
                             wallpapers = selectedWallpapers,
@@ -217,16 +262,16 @@ fun CategoryDetailScreen(
                     onDismissRequest = { showDeleteConfirmationDialog = false },
                     title = {
                         Text(
-                            text = if (count == 1) "Delete Wallpaper?" else "Delete $count Wallpapers?",
+                            text = if (count == 1) "Delete File?" else "Delete $count Files?",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                         )
                     },
                     text = {
                         Text(
                             text = if (count == 1)
-                                "Are you sure you want to delete the selected wallpaper? This action cannot be undone."
+                                "Are you sure you want to delete the selected file? This action cannot be undone."
                             else
-                                "Are you sure you want to delete the selected $count wallpapers? This action cannot be undone.",
+                                "Are you sure you want to delete the selected $count files? This action cannot be undone.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     },
@@ -238,7 +283,7 @@ fun CategoryDetailScreen(
                                 viewModel.deleteWallpapers(
                                     wallpapers = selectedWallpapers,
                                     onComplete = { count ->
-                                        val msg = if (count == 1) "Deleted 1 wallpaper" else "Deleted $count wallpapers"
+                                        val msg = if (count == 1) "Deleted 1 file" else "Deleted $count files"
                                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                         selectedWallpaperIds = emptySet()
                                     }
