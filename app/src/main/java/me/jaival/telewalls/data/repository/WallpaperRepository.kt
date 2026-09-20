@@ -144,7 +144,11 @@ class WallpaperRepository @Inject constructor(
     }
 
     fun getWallpapersByCategory(category: String): Flow<List<Wallpaper>> {
-        return searchWallpapers(query = "", category = category)
+        return if (category.equals("All", ignoreCase = true)) {
+            allWallpapers
+        } else {
+            searchWallpapers(query = "", category = category)
+        }
     }
 
     fun searchWallpapers(query: String, categories: Set<String> = setOf("All")): Flow<List<Wallpaper>> {
