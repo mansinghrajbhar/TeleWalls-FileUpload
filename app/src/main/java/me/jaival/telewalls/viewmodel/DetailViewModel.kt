@@ -73,28 +73,26 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             val loaded = wallpaperRepository.getWallpaperById(id)
             _wallpaper.value = loaded
-            
+
             if (loaded != null) {
-                val fullPathValid = !loaded.localPath.isNullOrBlank() && (loaded.localPath.startsWith("http") || (File(loaded.localPath).exists() && File(loaded.localPath).length() > 0))
-                
+                val fullPathValid = !loaded.localPath.isNullOrBlank() &&
+                    (loaded.localPath.startsWith("http") ||
+                        (File(loaded.localPath).exists() && File(loaded.localPath).length() > 0))
+
                 if (fullPathValid) {
                     _currentImagePath.value = loaded.localPath
                     _isLoadingFullImage.value = false
                     return@launch
                 }
+
                 _isLoadingFullImage.value = true
                 kotlinx.coroutines.yield()
 
-                // Download full image with automatic retry to handle TDLib transient failures
                 var fullPath: String? = null
                 for (attempt in 1..3) {
                     fullPath = wallpaperRepository.downloadFullWallpaper(loaded)
-                    if (fullPath != null) {
-                        break
-                    }
-                    if (attempt < 3) {
-                        kotlinx.coroutines.delay(1000)
-                    }
+                    if (fullPath != null) break
+                    if (attempt < 3) kotlinx.coroutines.delay(1000)
                 }
 
                 if (fullPath != null) {
@@ -103,7 +101,7 @@ class DetailViewModel @Inject constructor(
                 } else {
                     _currentImagePath.value = null
                 }
-                
+
                 _isLoadingFullImage.value = false
             } else {
                 _currentImagePath.value = null
@@ -126,7 +124,8 @@ class DetailViewModel @Inject constructor(
             _applyState.value = WallpaperApplyState.Applying
 
             var imagePath = current.localPath
-            if (imagePath.isNullOrBlank() || (!imagePath.startsWith("http") && (!File(imagePath).exists() || File(imagePath).length() == 0L))) {
+            if (imagePath.isNullOrBlank() || (!imagePath.startsWith("http") &&
+                    (!File(imagePath).exists() || File(imagePath).length() == 0L))) {
                 _isLoadingFullImage.value = true
                 imagePath = wallpaperRepository.downloadFullWallpaper(current)
                 _isLoadingFullImage.value = false
@@ -140,9 +139,7 @@ class DetailViewModel @Inject constructor(
                 }
             }
 
-            if (imagePath.isNullOrBlank()) {
-                imagePath = current.thumbnailPath
-            }
+            if (imagePath.isNullOrBlank()) imagePath = current.thumbnailPath
 
             if (imagePath.isNullOrBlank()) {
                 _applyState.value = WallpaperApplyState.Error("Image file not available to set wallpaper")
@@ -188,14 +185,16 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             _downloadState.value = WallpaperDownloadState.Downloading
 
-            var imagePath = current.localPath
-            if (imagePath.isNullOrBlank() || (!imagePath.startsWith("http") && (!File(imagePath).exists() || File(imagePath).length() == 0L))) {
+            var filePath = current.localPath
+            if (filePath.isNullOrBlank() ||
+                (!filePath.startsWith("http") &&
+                    (!File(filePath).exists() || File(filePath).length() == 0L))) {
                 _isLoadingFullImage.value = true
-                imagePath = wallpaperRepository.downloadFullWallpaper(current)
+                filePath = wallpaperRepository.downloadFullWallpaper(current)
                 _isLoadingFullImage.value = false
             }
 
-            if (!imagePath.isNullOrBlank()) {
+            if (!filePath.isNullOrBlank()) {
                 val updated = wallpaperRepository.getWallpaperById(current.id)
                 if (updated != null) {
                     _wallpaper.value = updated
@@ -203,20 +202,38 @@ class DetailViewModel @Inject constructor(
                 }
             }
 
-            if (imagePath.isNullOrBlank()) {
-                imagePath = current.thumbnailPath
+            if (filePath.isNullOrBlank()) {
+                filePath = current.thumbnailPath
             }
 
-            if (imagePath.isNullOrBlank()) {
-                _downloadState.value = WallpaperDownloadState.Error("Image file not available to download")
+            if (filePath.isNullOrBlank()) {
+                _downloadState.value = WallpaperDownloadState.Error("File is not available to download")
                 return@launch
             }
 
-            val result = ImageUtils.saveImageToGallery(context, imagePath, current.title, current.mimeType)
+            val isImage = current.mimeType.lowercase().startsWith("image/")
+            val result = if (isImage) {
+                ImageUtils.saveImageToGallery(
+                    context = context,
+                    imagePath = filePath,
+                    title = current.title.ifBlank { current.fileName },
+                    mimeType = current.mimeType
+                )
+            } else {
+                ImageUtils.saveFileToDownloads(
+                    context = context,
+                    filePath = filePath,
+                    fileName = current.fileName.ifBlank { current.title },
+                    mimeType = current.mimeType
+                )
+            }
+
             if (result.isSuccess) {
                 _downloadState.value = WallpaperDownloadState.Success
             } else {
-                _downloadState.value = WallpaperDownloadState.Error(result.exceptionOrNull()?.message ?: "Failed to save image to gallery")
+                _downloadState.value = WallpaperDownloadState.Error(
+                    result.exceptionOrNull()?.message ?: "Failed to save file"
+                )
             }
         }
     }
@@ -228,7 +245,7 @@ class DetailViewModel @Inject constructor(
             if (success) {
                 onDeleted()
             } else {
-                onError("Failed to delete wallpaper from Telegram Channel")
+                onError("Failed to delete file from Telegram Channel")
             }
         }
     }
