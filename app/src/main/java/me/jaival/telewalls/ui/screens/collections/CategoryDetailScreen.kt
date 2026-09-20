@@ -310,5 +310,4 @@ fun CategoryDetailScreen(
         }
     }
 }
-
-
+}
