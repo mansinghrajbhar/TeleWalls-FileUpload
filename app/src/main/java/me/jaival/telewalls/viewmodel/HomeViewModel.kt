@@ -85,7 +85,8 @@ class HomeViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
-    private var hasInitialReindexed = false
+    private var hasInitializedCache = false
+    private val startupSyncIntervalMs = 15 * 60 * 1000L
 
     init {
         viewModelScope.launch {
@@ -96,11 +97,15 @@ class HomeViewModel @Inject constructor(
             ) { state, channelId, isSetupCompleted ->
                 Triple(state, channelId, isSetupCompleted)
             }.collect { (authState, chatId, isSetupCompleted) ->
-                if (authState is TelegramAuthState.Ready && chatId != null && chatId != 0L && isSetupCompleted) {
-                    if (!hasInitialReindexed) {
-                        hasInitialReindexed = true
+                if (authState is TelegramAuthState.Ready && chatId != null && chatId != 0L && isSetupCompleted && !hasInitializedCache) {
+                    hasInitializedCache = true
+                    val cachedFiles = wallpaperRepository.allWallpapers.firstOrNull().orEmpty()
+                    val lastSync = settingsRepository.getLastChannelSyncTime(chatId)
+                    val cacheIsFresh = cachedFiles.isNotEmpty() && System.currentTimeMillis() - lastSync < startupSyncIntervalMs
+                    if (!cacheIsFresh) {
                         reindexChannel()
                     }
+                    viewModelScope.launch { wallpaperRepository.preloadThumbnails(limit = 12) }
                 }
             }
         }
