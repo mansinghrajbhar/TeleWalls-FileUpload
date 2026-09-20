@@ -158,6 +158,7 @@ fun DetailScreen(
     }
 
     val currentWall = wallpaper ?: return
+    val isImageFile = currentWall.mimeType.lowercase().startsWith("image/")
 
     val parsedSize = remember(currentWall.resolution) {
         try {
@@ -303,7 +304,7 @@ fun DetailScreen(
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = "Loading full wallpaper...",
+                                text = if (isImageFile) "Loading full wallpaper..." else "Preparing file...",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     color = Color.White,
                                     fontWeight = FontWeight.SemiBold,
@@ -535,11 +536,11 @@ fun DetailScreen(
                     ) {
                         Column {
                             Text(
-                                text = "Resolution",
+                                text = if (isImageFile) "Resolution" else "File Type",
                                 style = MaterialTheme.typography.labelSmall.copy(color = Color.White.copy(alpha = 0.5f))
                             )
                             Text(
-                                text = currentWall.resolution,
+                                text = if (isImageFile) currentWall.resolution else currentWall.mimeType.ifBlank { "Unknown" },
                                 style = MaterialTheme.typography.bodyMedium.copy(color = Color.White, fontWeight = FontWeight.SemiBold)
                             )
                         }
@@ -718,14 +719,14 @@ fun DetailScreen(
             onDismissRequest = { showDeleteConfirmationDialog = false },
             title = {
                 Text(
-                    text = "Delete Wallpaper",
+                    text = "Delete File",
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
             },
             text = {
                 Text(
-                    text = "Are you sure you want to delete this wallpaper? This action cannot be undone and will remove it from your Telegram Channel.",
+                    text = "Are you sure you want to delete this wallpaper? This action cannot be undone and will remove the file from your Telegram Channel.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
@@ -792,7 +793,7 @@ fun DetailScreen(
                     OutlinedTextField(
                         value = editTitle,
                         onValueChange = { editTitle = it },
-                        label = { Text("Wallpaper Title") },
+                        label = { Text(if (isImageFile) "Wallpaper Title" else "File Title") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -816,14 +817,14 @@ fun DetailScreen(
 
                     // Wallpaper Type Dropdown
                     var typeDropdownExpanded by remember { mutableStateOf(false) }
-                    val typeOptions = listOf("Phone", "Desktop/Tablet")
+                    val typeOptions = listOf("Phone", "Desktop/Tablet", "File")
 
                     Box(modifier = Modifier.fillMaxWidth()) {
                         OutlinedTextField(
                             value = editWallpaperType,
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Wallpaper Type") },
+                            label = { Text(if (isImageFile) "Wallpaper Type" else "File Type") },
                             trailingIcon = {
                                 Icon(
                                     imageVector = Icons.Default.ArrowDropDown,
