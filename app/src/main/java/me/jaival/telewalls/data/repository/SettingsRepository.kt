@@ -36,6 +36,7 @@ class SettingsRepository @Inject constructor(
         private val LAST_UPDATE_CHECK_TIME_KEY = longPreferencesKey("last_update_check_time_ms")
         private val HAS_SEEN_WELCOME_DIALOG_KEY = booleanPreferencesKey("has_seen_welcome_dialog")
         private fun lastChannelSyncKey(chatId: Long) = longPreferencesKey("last_channel_sync_$chatId")
+        private val CACHED_CHANNELS_KEY = stringSetPreferencesKey("cached_storage_channels")
     }
 
     val hasSeenWelcomeDialogFlow: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
@@ -137,6 +138,34 @@ class SettingsRepository @Inject constructor(
         context.settingsDataStore.edit { prefs ->
             prefs.clear()
         }
+    }
+
+    val cachedStorageChannelsFlow: Flow<Set<String>> = context.settingsDataStore.data.map { prefs ->
+        prefs[CACHED_CHANNELS_KEY] ?: emptySet()
+    }
+
+    suspend fun cacheStorageChannels(channels: List<me.jaival.telewalls.core.telegram.StorageChannel>) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[CACHED_CHANNELS_KEY] = channels.map {
+                listOf(it.chatId.toString(), it.title.replace("|", " "), it.documentCount.toString(), it.description.replace("|", " ")).joinToString("|")
+            }.toSet()
+        }
+    }
+
+    suspend fun getCachedStorageChannels(): List<me.jaival.telewalls.core.telegram.StorageChannel> {
+        return context.settingsDataStore.data.map { prefs ->
+            (prefs[CACHED_CHANNELS_KEY] ?: emptySet()).mapNotNull { raw ->
+                val parts = raw.split("|", limit = 4)
+                if (parts.size >= 4) {
+                    me.jaival.telewalls.core.telegram.StorageChannel(
+                        chatId = parts[0].toLongOrNull() ?: return@mapNotNull null,
+                        title = parts[1],
+                        documentCount = parts[2].toIntOrNull() ?: 0,
+                        description = parts[3]
+                    )
+                } else null
+            }
+        }.first()
     }
 
     suspend fun getLastChannelSyncTime(chatId: Long): Long = context.settingsDataStore.data.map { prefs -> prefs[lastChannelSyncKey(chatId)] ?: 0L }.first()
