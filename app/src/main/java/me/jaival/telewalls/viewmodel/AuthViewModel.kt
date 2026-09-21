@@ -60,6 +60,9 @@ class AuthViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            _channels.value = settingsRepository.getCachedStorageChannels()
+        }
+        viewModelScope.launch {
             authRepository.credentialsFlow.collect { creds ->
                 if (creds != null) {
                     telegramClient.start(creds)
@@ -165,11 +168,15 @@ class AuthViewModel @Inject constructor(
             _isLoading.value = true
             try {
                 val fetched = telegramClient.listStorageChannels()
-                _channels.value = fetched.filter {
+                val filtered = fetched.filter {
                     it.title.startsWith("TeleWalls") && it.description.contains("#telewalls-storage")
                 }
+                _channels.value = filtered
+                settingsRepository.cacheStorageChannels(filtered)
             } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Failed to load storage channels"
+                if (_channels.value.isEmpty()) {
+                    _channels.value = settingsRepository.getCachedStorageChannels()
+                }
             } finally {
                 _isLoading.value = false
             }
@@ -186,29 +193,28 @@ class AuthViewModel @Inject constructor(
     fun switchChannel(channelId: Long) {
         if (_activeChannelId.value == channelId && !_isReindexing.value) return
         viewModelScope.launch {
-            _isLoading.value = true
             _isReindexing.value = true
             _reindexStatus.value = "Switching active channel..."
             _errorMessage.value = null
             try {
                 authRepository.saveActiveChannelId(channelId)
                 _activeChannelId.value = channelId
-                _reindexStatus.value = "Re-indexing channel wallpapers..."
-                val result = wallpaperRepository.reindexFromChannel(channelId)
-                result.onSuccess { (wallpapersCount, categoriesCount) ->
-                    _reindexStatus.value = "Channel indexed ($wallpapersCount wallpapers, $categoriesCount categories)"
-                }.onFailure { error ->
-                    _errorMessage.value = "Re-indexing failed: ${error.message}"
+                if (telegramClient.authState.value is TelegramAuthState.Ready) {
+                    _reindexStatus.value = "Refreshing channel in background..."
+                    val result = wallpaperRepository.reindexFromChannel(channelId)
+                    result.onFailure { err ->
+                        _errorMessage.value = "Background refresh failed: ${err.message}"
+                    }
+                } else {
+                    _reindexStatus.value = "Offline — showing cached files"
                 }
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Failed to switch channel"
             } finally {
-                _isLoading.value = false
                 _isReindexing.value = false
             }
         }
     }
-
     fun createStorageChannel(title: String, onResult: (Boolean, String?) -> Unit = { _, _ -> }) {
         if (title.isBlank()) {
             val err = "Channel title cannot be empty"
