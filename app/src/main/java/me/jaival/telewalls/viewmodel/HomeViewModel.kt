@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import me.jaival.telewalls.data.repository.AuthRepository
 import me.jaival.telewalls.data.repository.Wallpaper
 import me.jaival.telewalls.data.repository.WallpaperRepository
+import me.jaival.telewalls.data.repository.SettingsRepository
 import javax.inject.Inject
 
 import kotlinx.coroutines.flow.combine
@@ -35,7 +36,8 @@ import me.jaival.telewalls.core.telegram.TelegramClient
 class HomeViewModel @Inject constructor(
     private val wallpaperRepository: WallpaperRepository,
     private val authRepository: AuthRepository,
-    private val telegramClient: TelegramClient
+    private val telegramClient: TelegramClient,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _selectedCategories = MutableStateFlow<Set<String>>(setOf("All"))
