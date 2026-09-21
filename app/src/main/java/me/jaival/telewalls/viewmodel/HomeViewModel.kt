@@ -15,7 +15,6 @@ import me.jaival.telewalls.data.repository.AuthRepository
 import me.jaival.telewalls.data.repository.Wallpaper
 import me.jaival.telewalls.data.repository.WallpaperRepository
 import me.jaival.telewalls.data.repository.SettingsRepository
-import me.jaival.telewalls.data.repository.SettingsRepository
 import javax.inject.Inject
 
 import kotlinx.coroutines.flow.combine
@@ -38,7 +37,6 @@ class HomeViewModel @Inject constructor(
     private val wallpaperRepository: WallpaperRepository,
     private val authRepository: AuthRepository,
     private val telegramClient: TelegramClient,
-    private val settingsRepository: SettingsRepository,
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
