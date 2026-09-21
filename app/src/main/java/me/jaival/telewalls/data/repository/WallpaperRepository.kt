@@ -181,9 +181,8 @@ class WallpaperRepository @Inject constructor(
             Log.d(TAG, "[REINDEX DEBUG] Starting reindexFromChannel for chatId=$chatId")
         }
         try {
-            // Delete cached wallpapers & categories from other channels so old channel data does not persist
-            wallpaperDao.deleteAllWallpapersExceptChatId(chatId)
-            categoryDao.clearCategories()
+            // Keep other channels in Room so previously opened channels remain available offline.
+            // Sync only the selected channel and let allWallpapers filter by activeChannelId.
             wallpaperDao.deleteOrphanFavorites()
 
             val catResult = syncCategoriesFromChannel(chatId)
