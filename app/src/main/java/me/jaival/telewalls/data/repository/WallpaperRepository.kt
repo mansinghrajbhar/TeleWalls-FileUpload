@@ -172,6 +172,15 @@ class WallpaperRepository @Inject constructor(
         return searchWallpapers(query, setOf(category))
     }
 
+    suspend fun findPossibleDuplicate(
+        chatId: Long,
+        fileName: String,
+        sizeBytes: Long,
+        mimeType: String
+    ): Wallpaper? = withContext(Dispatchers.IO) {
+        wallpaperDao.findPossibleDuplicate(chatId, fileName, sizeBytes, mimeType)?.toDomain()
+    }
+
     suspend fun getWallpaperById(id: String): Wallpaper? {
         return wallpaperDao.getWallpaperById(id)?.toDomain()
     }
