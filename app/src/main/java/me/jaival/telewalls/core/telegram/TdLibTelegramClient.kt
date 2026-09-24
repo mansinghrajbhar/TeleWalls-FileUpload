@@ -380,6 +380,55 @@ class TdLibTelegramClient @Inject constructor(
         return StorageChannel(chat.id, chat.title, 0, channelDescription)
     }
 
+    override suspend fun findDuplicateFile(
+        chatId: Long,
+        fileName: String,
+        sizeBytes: Long,
+        mimeType: String
+    ): WallpaperDocument? {
+        if (isMockMode) {
+            return getMockWallpapers(chatId).firstOrNull {
+                it.fileName.equals(fileName, ignoreCase = true) && it.sizeBytes == sizeBytes
+            }
+        }
+        ensureChatLoaded(chatId)
+
+        var fromMessageId = 0L
+        var pages = 0
+        while (pages < 100) {
+            val messages = sendTd<TdApi.Messages>(
+                TdApi.GetChatHistory(chatId, fromMessageId, 0, 100, false)
+            )
+            if (messages.messages.isEmpty()) break
+
+            for (message in messages.messages) {
+                val content = message.content
+                if (content is TdApi.MessageDocument) {
+                    val document = content.document
+                    val remoteFileName = document.fileName.orEmpty()
+                    val remoteSize = document.document.size
+                    val remoteMime = document.mimeType.orEmpty()
+
+                    if (remoteFileName.equals(fileName, ignoreCase = true) &&
+                        remoteSize == sizeBytes &&
+                        (remoteMime.isBlank() || mimeType.isBlank() ||
+                            remoteMime.equals(mimeType, ignoreCase = true) ||
+                            remoteMime == "application/octet-stream" ||
+                            mimeType == "application/octet-stream")
+                    ) {
+                        return parseWallpaperFromMessage(message, null)
+                    }
+                }
+            }
+
+            val oldestMessageId = messages.messages.last().id
+            if (oldestMessageId == fromMessageId) break
+            fromMessageId = oldestMessageId
+            pages++
+        }
+        return null
+    }
+
     override fun uploadWallpaper(
         chatId: Long,
         localPath: String,
