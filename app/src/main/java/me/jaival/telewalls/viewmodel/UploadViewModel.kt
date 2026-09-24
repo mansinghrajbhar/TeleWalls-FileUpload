@@ -34,6 +34,7 @@ sealed interface UploadState {
     data class Processing(val status: String) : UploadState
     data class Uploading(val progressPercent: Float, val bytesUploaded: Long, val totalBytes: Long) : UploadState
     data object Success : UploadState
+    data class DuplicateFound(val existingFileName: String, val existingSizeBytes: Long) : UploadState
     data class Error(val message: String) : UploadState
 }
 
@@ -218,7 +219,8 @@ class UploadViewModel @Inject constructor(
         tags: String,
         description: String,
         author: String,
-        wallpaperType: String = _selectedWallpaperType.value
+        wallpaperType: String = _selectedWallpaperType.value,
+        forceUpload: Boolean = false
     ) {
         val uri = _selectedImageUri.value ?: run {
             _uploadState.value = UploadState.Error("Please select a file first")
@@ -235,8 +237,29 @@ class UploadViewModel @Inject constructor(
 
             val finalFileName = extractedFileName ?: file.name
             val wallpaperTitle = title.trim().ifBlank { finalFileName }
+            val mimeType = getMimeTypeFromUri(context, uri) ?: "application/octet-stream"
 
-            val isImage = getMimeTypeFromUri(context, uri)?.lowercase()?.startsWith("image/") == true
+            if (!forceUpload) {
+                val chatId = authRepository.activeChannelIdFlow.firstOrNull()
+                if (chatId != null && chatId != 0L) {
+                    val duplicate = wallpaperRepository.findPossibleDuplicate(
+                        chatId = chatId,
+                        fileName = finalFileName,
+                        sizeBytes = file.length(),
+                        mimeType = mimeType
+                    )
+                    if (duplicate != null) {
+                        _uploadState.value = UploadState.DuplicateFound(
+                            existingFileName = duplicate.fileName,
+                            existingSizeBytes = duplicate.sizeBytes
+                        )
+                        file.delete()
+                        return@launch
+                    }
+                }
+            }
+
+            val isImage = mimeType.lowercase().startsWith("image/")
             val chosenType = if (isImage) {
                 if (wallpaperType.isNotBlank() && !wallpaperType.contains("Auto", ignoreCase = true)) {
                     wallpaperType
@@ -261,8 +284,6 @@ class UploadViewModel @Inject constructor(
                 timestamp = System.currentTimeMillis(),
                 wallpaperType = chosenType
             )
-
-            val mimeType = getMimeTypeFromUri(context, uri) ?: "application/octet-stream"
 
             val chatId = authRepository.activeChannelIdFlow.firstOrNull()
             val targetChatId = chatId ?: 99999L
