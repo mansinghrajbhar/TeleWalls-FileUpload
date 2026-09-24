@@ -159,7 +159,7 @@ class WallpaperRepositoryTest {
             val formatted = if (clean.startsWith("TeleWalls")) clean else "TeleWalls $clean"
             return StorageChannel(100L, formatted, 0, "TeleWalls Storage Vault #telewalls-storage")
         }
-        override suspend fun findDuplicateFile(chatId: Long, fileName: String, sizeBytes: Long, mimeType: String): WallpaperDocument? = remoteWallpapers.firstOrNull { it.chatId == chatId && it.fileName.equals(fileName, ignoreCase = true) && it.sizeBytes == sizeBytes && (it.mimeType.isBlank() || mimeType.isBlank() || it.mimeType.equals(mimeType, ignoreCase = true)) }
+        override suspend fun findDuplicateFile(chatId: Long, fileName: String, sizeBytes: Long, mimeType: String, sha256: String?): WallpaperDocument? = remoteWallpapers.firstOrNull { it.chatId == chatId && it.fileName.equals(fileName, ignoreCase = true) && it.sizeBytes == sizeBytes && (it.mimeType.isBlank() || mimeType.isBlank() || it.mimeType.equals(mimeType, ignoreCase = true)) }
         override fun uploadWallpaper(chatId: Long, localPath: String, fileName: String, mimeType: String, metadata: WallpaperMetadata): Flow<TelegramUploadEvent> = flowOf()
         override suspend fun fetchWallpapers(chatId: Long, fromMessageId: Long, limit: Int): List<WallpaperDocument> = remoteWallpapers
         override suspend fun downloadWallpaperFile(fileId: String, destinationPath: String): String? = null
