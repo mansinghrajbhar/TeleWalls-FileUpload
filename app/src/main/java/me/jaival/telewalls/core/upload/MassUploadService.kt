@@ -304,7 +304,12 @@ class MassUploadService : Service() {
                 )
             } catch (e: Exception) {
                 Log.w(TAG, "Duplicate check failed for " + finalFileName + ": " + e.message)
-                null
+                tempFile.delete()
+                failureCount++
+                errorDetails.add(
+                    "File #$currentIndex ($cleanTitle): Could not verify duplicates; upload stopped."
+                )
+                continue
             }
 
             if (duplicate != null) {
