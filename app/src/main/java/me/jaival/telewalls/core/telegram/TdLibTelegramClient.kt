@@ -422,12 +422,14 @@ class TdLibTelegramClient @Inject constructor(
                     remoteMime == "application/octet-stream" ||
                     mimeType == "application/octet-stream"
 
-                val legacyMatch = remoteFileName.equals(fileName, ignoreCase = true) &&
+                val legacyMatch = remoteHash == null &&
+                    remoteFileName.equals(fileName, ignoreCase = true) &&
                     remoteSize == sizeBytes &&
                     mimeMatches
 
                 // New uploads use SHA-256, so renamed copies are detected too.
-                // Older uploads have no hash and use the legacy name/size/type match.
+                // If an existing upload has a hash, use the hash as the authoritative
+                // content identity instead of blocking a different file with the same name/size.
                 val hashMatch = normalizedHash != null && remoteHash != null &&
                     normalizedHash == remoteHash
 
