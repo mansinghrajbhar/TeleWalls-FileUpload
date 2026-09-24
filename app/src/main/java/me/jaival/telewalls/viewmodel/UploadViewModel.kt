@@ -22,6 +22,8 @@ import me.jaival.telewalls.data.repository.AuthRepository
 import me.jaival.telewalls.data.repository.WallpaperRepository
 import java.io.File
 import java.io.FileOutputStream
+import java.io.BufferedInputStream
+import java.security.MessageDigest
 import javax.inject.Inject
 
 import kotlinx.coroutines.flow.SharingStarted
@@ -238,6 +240,7 @@ class UploadViewModel @Inject constructor(
             val finalFileName = extractedFileName ?: file.name
             val wallpaperTitle = title.trim().ifBlank { finalFileName }
             val mimeType = getMimeTypeFromUri(context, uri) ?: "application/octet-stream"
+            val sha256 = calculateSha256(file)
 
             if (!forceUpload) {
                 val chatId = authRepository.activeChannelIdFlow.firstOrNull()
@@ -246,7 +249,8 @@ class UploadViewModel @Inject constructor(
                         chatId = chatId,
                         fileName = finalFileName,
                         sizeBytes = file.length(),
-                        mimeType = mimeType
+                        mimeType = mimeType,
+                        sha256 = sha256
                     )
                     if (duplicate != null) {
                         _uploadState.value = UploadState.DuplicateFound(
@@ -282,7 +286,8 @@ class UploadViewModel @Inject constructor(
                 description = description,
                 author = author.trim().ifBlank { CharacterAuthorUtils.getRandomCharacterName() },
                 timestamp = System.currentTimeMillis(),
-                wallpaperType = chosenType
+                wallpaperType = chosenType,
+                sha256 = sha256
             )
 
             val chatId = authRepository.activeChannelIdFlow.firstOrNull()
@@ -319,6 +324,19 @@ class UploadViewModel @Inject constructor(
         _selectedFileName.value = null
         _detectedColors.value = emptyList()
         _selectedWallpaperType.value = ""
+    }
+
+    private suspend fun calculateSha256(file: File): String = withContext(Dispatchers.IO) {
+        val digest = MessageDigest.getInstance("SHA-256")
+        BufferedInputStream(file.inputStream()).use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     private suspend fun copyUriToTempFile(context: Context, uri: Uri, customFileName: String?): File? = withContext(Dispatchers.IO) {
