@@ -29,6 +29,9 @@ interface WallpaperDao {
     @Query("SELECT * FROM wallpapers WHERE id = :id LIMIT 1")
     suspend fun getWallpaperById(id: String): WallpaperEntity?
 
+    @Query("SELECT * FROM wallpapers WHERE chatId = :chatId AND fileName = :fileName AND sizeBytes = :sizeBytes AND mimeType = :mimeType LIMIT 1")
+    suspend fun findPossibleDuplicate(chatId: Long, fileName: String, sizeBytes: Long, mimeType: String): WallpaperEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWallpapers(wallpapers: List<WallpaperEntity>)
 
