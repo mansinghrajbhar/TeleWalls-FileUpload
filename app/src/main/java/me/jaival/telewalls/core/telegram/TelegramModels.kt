@@ -88,7 +88,10 @@ data class WallpaperMetadata(
     val thumbnailFileId: String? = null,
 
     @SerializedName(value = "k", alternate = ["wallpaperType"])
-    val wallpaperType: String = "Phone"
+    val wallpaperType: String = "Phone",
+
+    @SerializedName(value = "m", alternate = ["sha256"])
+    val sha256: String? = null
 )
 
 @Keep
