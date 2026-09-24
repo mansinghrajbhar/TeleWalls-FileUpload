@@ -32,6 +32,8 @@ import me.jaival.telewalls.data.repository.AuthRepository
 import me.jaival.telewalls.data.repository.WallpaperRepository
 import java.io.File
 import java.io.FileOutputStream
+import java.io.BufferedInputStream
+import java.security.MessageDigest
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -256,6 +258,7 @@ class MassUploadService : Service() {
             // Image-specific metadata is only calculated for images.
             // Other files are uploaded directly as Telegram documents.
             val mimeType = getMimeTypeFromUri(uri) ?: "application/octet-stream"
+            val sha256 = calculateSha256(tempFile)
             val isImage = mimeType.lowercase().startsWith("image/")
             val (width, height) = if (isImage) detectResolution(uri) else Pair(0, 0)
             val resolutionStr = if (isImage && width > 0 && height > 0) "${width}x${height}" else ""
@@ -285,10 +288,31 @@ class MassUploadService : Service() {
                 description = "",
                 author = authorName,
                 timestamp = System.currentTimeMillis(),
-                wallpaperType = wallpaperTypeStr
+                wallpaperType = wallpaperTypeStr,
+                sha256 = sha256
             )
 
             val finalFileName = rawFileName ?: tempFile.name
+
+            val duplicate = try {
+                wallpaperRepository.findPossibleDuplicate(
+                    chatId = chatId,
+                    fileName = finalFileName,
+                    sizeBytes = tempFile.length(),
+                    mimeType = mimeType,
+                    sha256 = sha256
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Duplicate check failed for " + finalFileName + ": " + e.message)
+                null
+            }
+
+            if (duplicate != null) {
+                Log.i(TAG, "Skipping duplicate batch file: " + finalFileName)
+                tempFile.delete()
+                errorDetails.add("File #$currentIndex ($cleanTitle): Duplicate skipped; already exists in Telegram.")
+                continue
+            }
 
             var uploadSuccess = false
             var errorMessage: String? = null
@@ -354,6 +378,19 @@ class MassUploadService : Service() {
             showFinalResultNotification(total, successCount, failureCount, errorDetails)
         }
         stopSelf()
+    }
+
+    private fun calculateSha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        BufferedInputStream(file.inputStream()).use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     private fun stopForegroundService() {
