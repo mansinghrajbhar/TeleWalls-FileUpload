@@ -179,8 +179,14 @@ class WallpaperRepository @Inject constructor(
         mimeType: String,
         sha256: String? = null
     ): Wallpaper? = withContext(Dispatchers.IO) {
-        wallpaperDao.findPossibleDuplicate(chatId, fileName, sizeBytes, mimeType)?.toDomain()
-            ?: try {
+        // When a SHA-256 is available, Telegram is the source of truth. This avoids
+        // false positives from an older local DB entry with the same name/size/type.
+        val localDuplicate = if (sha256.isNullOrBlank()) {
+            wallpaperDao.findPossibleDuplicate(chatId, fileName, sizeBytes, mimeType)?.toDomain()
+        } else {
+            null
+        }
+        localDuplicate ?: try {
                 telegramClient.findDuplicateFile(chatId, fileName, sizeBytes, mimeType, sha256)?.let { remote ->
                     Wallpaper(
                         id = "${remote.chatId}_${remote.messageId}",
