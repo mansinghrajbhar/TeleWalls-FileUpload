@@ -24,7 +24,8 @@ interface TelegramClient {
         chatId: Long,
         fileName: String,
         sizeBytes: Long,
-        mimeType: String
+        mimeType: String,
+        sha256: String? = null
     ): WallpaperDocument?
 
     fun uploadWallpaper(
