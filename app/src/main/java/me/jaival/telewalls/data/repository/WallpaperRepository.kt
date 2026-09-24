@@ -179,43 +179,33 @@ class WallpaperRepository @Inject constructor(
         mimeType: String
     ): Wallpaper? = withContext(Dispatchers.IO) {
         wallpaperDao.findPossibleDuplicate(chatId, fileName, sizeBytes, mimeType)?.toDomain()
-            ?: run {
-                if (telegramClient.connectionState.value == me.jaival.telewalls.core.telegram.TelegramConnectionState.READY) {
-                    try {
-                        telegramClient.fetchWallpapers(chatId, 0L, Int.MAX_VALUE).firstOrNull { remote ->
-                            remote.fileName.equals(fileName, ignoreCase = true) &&
-                                remote.sizeBytes == sizeBytes &&
-                                (remote.mimeType.isBlank() || mimeType.isBlank() ||
-                                    remote.mimeType.equals(mimeType, ignoreCase = true) ||
-                                    remote.mimeType == "application/octet-stream" || mimeType == "application/octet-stream")
-                        }?.let { remote ->
-                            Wallpaper(
-                                id = "${remote.chatId}_${remote.messageId}",
-                                messageId = remote.messageId,
-                                chatId = remote.chatId,
-                                fileId = remote.fileId,
-                                fileName = remote.fileName,
-                                mimeType = remote.mimeType,
-                                sizeBytes = remote.sizeBytes,
-                                title = remote.metadata.title ?: remote.fileName,
-                                category = remote.metadata.category ?: "Uncategorized",
-                                tags = remote.metadata.tags ?: emptyList(),
-                                resolution = remote.metadata.resolution ?: "",
-                                aspectRatio = remote.metadata.aspectRatio ?: "",
-                                colors = remote.metadata.colors ?: emptyList(),
-                                description = remote.metadata.description ?: "",
-                                author = remote.metadata.author ?: "",
-                                timestamp = remote.metadata.timestamp,
-                                localPath = remote.localPath,
-                                thumbnailPath = remote.thumbnailPath,
-                                isFavorite = false,
-                                wallpaperType = remote.metadata.wallpaperType ?: "File"
-                            )
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Remote duplicate check failed; continuing with upload: ${e.message}")
-                    }
+            ?: try {
+                telegramClient.findDuplicateFile(chatId, fileName, sizeBytes, mimeType)?.let { remote ->
+                    Wallpaper(
+                        id = "${remote.chatId}_${remote.messageId}",
+                        messageId = remote.messageId,
+                        chatId = remote.chatId,
+                        fileId = remote.fileId,
+                        fileName = remote.fileName,
+                        mimeType = remote.mimeType,
+                        sizeBytes = remote.sizeBytes,
+                        title = remote.metadata.title ?: remote.fileName,
+                        category = remote.metadata.category ?: "Uncategorized",
+                        tags = remote.metadata.tags ?: emptyList(),
+                        resolution = remote.metadata.resolution ?: "",
+                        aspectRatio = remote.metadata.aspectRatio ?: "",
+                        colors = remote.metadata.colors ?: emptyList(),
+                        description = remote.metadata.description ?: "",
+                        author = remote.metadata.author ?: "",
+                        timestamp = remote.metadata.timestamp,
+                        localPath = remote.localPath,
+                        thumbnailPath = remote.thumbnailPath,
+                        isFavorite = false,
+                        wallpaperType = remote.metadata.wallpaperType ?: "File"
+                    )
                 }
+            } catch (e: Exception) {
+                Log.w(TAG, "Telegram duplicate check failed: ${e.message}")
                 null
             }
     }
