@@ -20,6 +20,13 @@ interface TelegramClient {
     suspend fun listStorageChannels(): List<StorageChannel>
     suspend fun createStorageChannel(title: String): StorageChannel
     
+    suspend fun findDuplicateFile(
+        chatId: Long,
+        fileName: String,
+        sizeBytes: Long,
+        mimeType: String
+    ): WallpaperDocument?
+
     fun uploadWallpaper(
         chatId: Long,
         localPath: String,
