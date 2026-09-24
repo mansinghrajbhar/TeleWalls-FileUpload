@@ -71,6 +71,14 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.IconButton
 
+private fun formatFileSizeForDialog(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB", "TB")
+    var value = bytes.toDouble()
+    var index = 0
+    while (value >= 1024 && index < units.lastIndex) { value /= 1024; index++ }
+    return if (index == 0) "$bytes B" else String.format("%.1f %s", value, units[index])
+}
 @Composable
 fun UploadScreen(
     viewModel: UploadViewModel,
@@ -95,6 +103,7 @@ fun UploadScreen(
 
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var newCategoryInput by remember { mutableStateOf("") }
+    var showDuplicateDialog by remember { mutableStateOf(false) }
 
     val singlePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -123,6 +132,8 @@ fun UploadScreen(
             onUploadSuccess()
         } else if (uploadState is UploadState.Error) {
             Toast.makeText(context, (uploadState as UploadState.Error).message, Toast.LENGTH_SHORT).show()
+        } else if (uploadState is UploadState.DuplicateFound) {
+            showDuplicateDialog = true
         }
     }
 
@@ -519,6 +530,32 @@ fun UploadScreen(
         }
     }
 
+    if (showDuplicateDialog && uploadState is UploadState.DuplicateFound) {
+        val duplicate = uploadState as UploadState.DuplicateFound
+        AlertDialog(
+            onDismissRequest = { showDuplicateDialog = false },
+            title = { Text("Duplicate file detected") },
+            text = {
+                Text(
+                    "A file with the same name, size, and file type already exists in this Telegram channel.\n\n" +
+                        "Existing file: ${duplicate.existingFileName}\n" +
+                        "Size: ${formatFileSizeForDialog(duplicate.existingSizeBytes)}"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDuplicateDialog = false
+                    viewModel.startUpload(context, title, selectedCategory, tags, description, author, forceUpload = true)
+                }) { Text("Upload Anyway") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showDuplicateDialog = false
+                    viewModel.resetState()
+                }) { Text("Cancel") }
+            }
+        )
+    }
     // Add New Category Dialog
     if (showAddCategoryDialog) {
         val cleanInput = newCategoryInput.trim()
