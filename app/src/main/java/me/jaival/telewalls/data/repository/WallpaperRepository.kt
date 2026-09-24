@@ -176,11 +176,12 @@ class WallpaperRepository @Inject constructor(
         chatId: Long,
         fileName: String,
         sizeBytes: Long,
-        mimeType: String
+        mimeType: String,
+        sha256: String? = null
     ): Wallpaper? = withContext(Dispatchers.IO) {
         wallpaperDao.findPossibleDuplicate(chatId, fileName, sizeBytes, mimeType)?.toDomain()
             ?: try {
-                telegramClient.findDuplicateFile(chatId, fileName, sizeBytes, mimeType)?.let { remote ->
+                telegramClient.findDuplicateFile(chatId, fileName, sizeBytes, mimeType, sha256)?.let { remote ->
                     Wallpaper(
                         id = "${remote.chatId}_${remote.messageId}",
                         messageId = remote.messageId,
