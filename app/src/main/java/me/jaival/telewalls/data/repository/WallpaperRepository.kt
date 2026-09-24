@@ -186,35 +186,30 @@ class WallpaperRepository @Inject constructor(
         } else {
             null
         }
-        localDuplicate ?: try {
-                telegramClient.findDuplicateFile(chatId, fileName, sizeBytes, mimeType, sha256)?.let { remote ->
-                    Wallpaper(
-                        id = "${remote.chatId}_${remote.messageId}",
-                        messageId = remote.messageId,
-                        chatId = remote.chatId,
-                        fileId = remote.fileId,
-                        fileName = remote.fileName,
-                        mimeType = remote.mimeType,
-                        sizeBytes = remote.sizeBytes,
-                        title = remote.metadata.title ?: remote.fileName,
-                        category = remote.metadata.category ?: "Uncategorized",
-                        tags = remote.metadata.tags ?: emptyList(),
-                        resolution = remote.metadata.resolution ?: "",
-                        aspectRatio = remote.metadata.aspectRatio ?: "",
-                        colors = remote.metadata.colors ?: emptyList(),
-                        description = remote.metadata.description ?: "",
-                        author = remote.metadata.author ?: "",
-                        timestamp = remote.metadata.timestamp,
-                        localPath = remote.localPath,
-                        thumbnailPath = remote.thumbnailPath,
-                        isFavorite = false,
-                        wallpaperType = remote.metadata.wallpaperType ?: "File"
-                    )
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Telegram duplicate check failed: ${e.message}")
-                null
-            }
+        localDuplicate ?: telegramClient.findDuplicateFile(chatId, fileName, sizeBytes, mimeType, sha256)?.let { remote ->
+            Wallpaper(
+                id = "${remote.chatId}_${remote.messageId}",
+                messageId = remote.messageId,
+                chatId = remote.chatId,
+                fileId = remote.fileId,
+                fileName = remote.fileName,
+                mimeType = remote.mimeType,
+                sizeBytes = remote.sizeBytes,
+                title = remote.metadata.title ?: remote.fileName,
+                category = remote.metadata.category ?: "Uncategorized",
+                tags = remote.metadata.tags ?: emptyList(),
+                resolution = remote.metadata.resolution ?: "",
+                aspectRatio = remote.metadata.aspectRatio ?: "",
+                colors = remote.metadata.colors ?: emptyList(),
+                description = remote.metadata.description ?: "",
+                author = remote.metadata.author ?: "",
+                timestamp = remote.metadata.timestamp,
+                localPath = remote.localPath,
+                thumbnailPath = remote.thumbnailPath,
+                isFavorite = false,
+                wallpaperType = remote.metadata.wallpaperType ?: "File"
+            )
+        }
     }
     suspend fun getWallpaperById(id: String): Wallpaper? {
         return wallpaperDao.getWallpaperById(id)?.toDomain()
