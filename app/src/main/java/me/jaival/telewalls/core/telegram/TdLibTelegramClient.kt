@@ -384,17 +384,21 @@ class TdLibTelegramClient @Inject constructor(
         chatId: Long,
         fileName: String,
         sizeBytes: Long,
-        mimeType: String
+        mimeType: String,
+        sha256: String?
     ): WallpaperDocument? {
         if (isMockMode) {
             return getMockWallpapers(chatId).firstOrNull {
                 it.fileName.equals(fileName, ignoreCase = true) && it.sizeBytes == sizeBytes
             }
         }
+
         ensureChatLoaded(chatId)
 
+        val normalizedHash = sha256?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
         var fromMessageId = 0L
         var pages = 0
+
         while (pages < 100) {
             val messages = sendTd<TdApi.Messages>(
                 TdApi.GetChatHistory(chatId, fromMessageId, 0, 100, false)
@@ -403,22 +407,56 @@ class TdLibTelegramClient @Inject constructor(
 
             for (message in messages.messages) {
                 val content = message.content
-                if (content is TdApi.MessageDocument) {
-                    val document = content.document
-                    val remoteFileName = document.fileName.orEmpty()
-                    val remoteSize = document.document.size
-                    val remoteMime = document.mimeType.orEmpty()
+                if (content !is TdApi.MessageDocument) continue
 
-                    if (remoteFileName.equals(fileName, ignoreCase = true) &&
-                        remoteSize == sizeBytes &&
-                        (remoteMime.isBlank() || mimeType.isBlank() ||
-                            remoteMime.equals(mimeType, ignoreCase = true) ||
-                            remoteMime == "application/octet-stream" ||
-                            mimeType == "application/octet-stream")
-                    ) {
-                        return parseWallpaperFromMessage(message, null)
-                    }
-                }
+                val document = content.document
+                val remoteFileName = document.fileName.orEmpty()
+                val remoteSize = document.document.size
+                val remoteMime = document.mimeType.orEmpty()
+                val caption = content.caption.text.orEmpty()
+                val remoteMetadata = parseMetadataFromCaption(caption)
+                val remoteHash = remoteMetadata?.sha256?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+
+                val mimeMatches = remoteMime.isBlank() || mimeType.isBlank() ||
+                    remoteMime.equals(mimeType, ignoreCase = true) ||
+                    remoteMime == "application/octet-stream" ||
+                    mimeType == "application/octet-stream"
+
+                val legacyMatch = remoteFileName.equals(fileName, ignoreCase = true) &&
+                    remoteSize == sizeBytes &&
+                    mimeMatches
+
+                // New uploads use SHA-256, so renamed copies are detected too.
+                // Older uploads have no hash and use the legacy name/size/type match.
+                val hashMatch = normalizedHash != null && remoteHash != null &&
+                    normalizedHash == remoteHash
+
+                if (!hashMatch && !legacyMatch) continue
+
+                val remoteId = document.document.remote?.id?.takeIf { it.isNotBlank() }
+                    ?: document.document.id.toString()
+                val fallbackMetadata = WallpaperMetadata(
+                    title = remoteFileName.ifBlank { "document_" + message.id },
+                    category = "Uncategorized",
+                    sizeBytes = remoteSize,
+                    wallpaperType = "File"
+                )
+                val metadata = (remoteMetadata ?: fallbackMetadata).copy(
+                    sizeBytes = remoteSize,
+                    sha256 = remoteHash
+                )
+
+                return WallpaperDocument(
+                    messageId = message.id,
+                    chatId = message.chatId,
+                    fileId = remoteId,
+                    fileName = remoteFileName.ifBlank { "document_" + message.id },
+                    mimeType = remoteMime.ifBlank { mimeType },
+                    sizeBytes = remoteSize,
+                    localPath = null,
+                    thumbnailPath = null,
+                    metadata = metadata
+                )
             }
 
             val oldestMessageId = messages.messages.last().id
@@ -426,6 +464,7 @@ class TdLibTelegramClient @Inject constructor(
             fromMessageId = oldestMessageId
             pages++
         }
+
         return null
     }
 
