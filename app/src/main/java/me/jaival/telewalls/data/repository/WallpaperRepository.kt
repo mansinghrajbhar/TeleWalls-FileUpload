@@ -208,7 +208,8 @@ class WallpaperRepository @Inject constructor(
                                 timestamp = remote.metadata.timestamp,
                                 localPath = remote.localPath,
                                 thumbnailPath = remote.thumbnailPath,
-                                isFavorite = false
+                                isFavorite = false,
+                                wallpaperType = remote.metadata.wallpaperType ?: "File"
                             )
                         }
                     } catch (e: Exception) {
