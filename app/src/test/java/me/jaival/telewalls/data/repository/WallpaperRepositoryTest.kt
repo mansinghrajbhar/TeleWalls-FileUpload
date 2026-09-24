@@ -35,6 +35,7 @@ class WallpaperRepositoryTest {
         override fun getFavoriteWallpapers(): Flow<List<WallpaperEntity>> = flowOf(wallpapers.values.filter { it.isFavorite })
 
         override suspend fun getWallpaperById(id: String): WallpaperEntity? = wallpapers[id]
+        override suspend fun findPossibleDuplicate(chatId: Long, fileName: String, sizeBytes: Long, mimeType: String): WallpaperEntity? = wallpapers.values.firstOrNull { it.chatId == chatId && it.fileName == fileName && it.sizeBytes == sizeBytes && it.mimeType == mimeType }
         override suspend fun insertWallpapers(wallpapers: List<WallpaperEntity>) {
             wallpapers.forEach { this.wallpapers[it.id] = it }
         }
