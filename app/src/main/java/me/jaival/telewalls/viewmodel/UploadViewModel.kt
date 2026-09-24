@@ -245,13 +245,23 @@ class UploadViewModel @Inject constructor(
             if (!forceUpload) {
                 val chatId = authRepository.activeChannelIdFlow.firstOrNull()
                 if (chatId != null && chatId != 0L) {
-                    val duplicate = wallpaperRepository.findPossibleDuplicate(
-                        chatId = chatId,
-                        fileName = finalFileName,
-                        sizeBytes = file.length(),
-                        mimeType = mimeType,
-                        sha256 = sha256
-                    )
+                    val duplicate = try {
+                        wallpaperRepository.findPossibleDuplicate(
+                            chatId = chatId,
+                            fileName = finalFileName,
+                            sizeBytes = file.length(),
+                            mimeType = mimeType,
+                            sha256 = sha256
+                        )
+                    } catch (e: Exception) {
+                        file.delete()
+                        _uploadState.value = UploadState.Error(
+                            "Could not verify duplicates with Telegram. Upload was stopped: " +
+                                (e.message ?: "network or Telegram error")
+                        )
+                        return@launch
+                    }
+
                     if (duplicate != null) {
                         _uploadState.value = UploadState.DuplicateFound(
                             existingFileName = duplicate.fileName,
