@@ -527,6 +527,7 @@ class MassUploadService : Service() {
         }
 
         notificationManager.notify(RESULT_NOTIFICATION_ID, builder.build())
+        Log.i(TAG, "BATCH_UPLOAD_RESULT: " + errorDetails.joinToString(" | "))
     }
 
     private fun createNotificationChannels() {
