@@ -298,13 +298,15 @@ class MassUploadService : Service() {
             val finalFileName = rawFileName ?: tempFile.name
 
             val duplicate = try {
-                wallpaperRepository.findPossibleDuplicate(
-                    chatId = chatId,
-                    fileName = finalFileName,
-                    sizeBytes = tempFile.length(),
-                    mimeType = mimeType,
-                    sha256 = sha256
-                )
+                withTimeout(DUPLICATE_CHECK_TIMEOUT_MS) {
+                    wallpaperRepository.findPossibleDuplicate(
+                        chatId = chatId,
+                        fileName = finalFileName,
+                        sizeBytes = tempFile.length(),
+                        mimeType = mimeType,
+                        sha256 = sha256
+                    )
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "Duplicate check failed for " + finalFileName + ": " + e.message)
                 tempFile.delete()
@@ -343,7 +345,10 @@ class MassUploadService : Service() {
                                 uploadSuccess = true
                             }
                             is TelegramUploadEvent.Failed -> {
-                                errorMessage = event.message
+                                // Stop collecting this file immediately. TDLib can keep the
+                                // Flow open after reporting Failed; waiting for completion
+                                // would block every remaining file in the batch.
+                                throw IllegalStateException(event.message)
                             }
                         }
                     }
