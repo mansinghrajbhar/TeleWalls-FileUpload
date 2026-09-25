@@ -23,6 +23,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import me.jaival.telewalls.MainActivity
 import me.jaival.telewalls.core.palette.PaletteExtractor
 import me.jaival.telewalls.core.telegram.TelegramUploadEvent
@@ -79,6 +80,7 @@ class MassUploadService : Service() {
         private const val RESULT_CHANNEL_ID = "mass_upload_result_channel"
         private const val PROGRESS_NOTIFICATION_ID = 2001
         private const val RESULT_NOTIFICATION_ID = 2002
+        private const val PER_FILE_UPLOAD_TIMEOUT_MS = 3 * 60 * 1000L
 
         fun startUpload(
             context: Context,
@@ -323,28 +325,36 @@ class MassUploadService : Service() {
             var errorMessage: String? = null
 
             try {
-                wallpaperRepository.uploadWallpaper(
-                    chatId = chatId,
-                    localPath = tempFile.absolutePath,
-                    fileName = finalFileName,
-                    mimeType = mimeType,
-                    metadata = metadata
-                ).collect { event ->
-                    when (event) {
-                        is TelegramUploadEvent.Progress -> {
-                            // Progress update if needed
-                        }
-                        is TelegramUploadEvent.Succeeded -> {
-                            wallpaperRepository.saveUploadedWallpaperToDb(event.document)
-                            uploadSuccess = true
-                        }
-                        is TelegramUploadEvent.Failed -> {
-                            errorMessage = event.message
+                withTimeout(PER_FILE_UPLOAD_TIMEOUT_MS) {
+                    wallpaperRepository.uploadWallpaper(
+                        chatId = chatId,
+                        localPath = tempFile.absolutePath,
+                        fileName = finalFileName,
+                        mimeType = mimeType,
+                        metadata = metadata
+                    ).collect { event ->
+                        when (event) {
+                            is TelegramUploadEvent.Progress -> {
+                                // Progress update if needed
+                            }
+                            is TelegramUploadEvent.Succeeded -> {
+                                wallpaperRepository.saveUploadedWallpaperToDb(event.document)
+                                uploadSuccess = true
+                            }
+                            is TelegramUploadEvent.Failed -> {
+                                errorMessage = event.message
+                            }
                         }
                     }
                 }
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                errorMessage = "Upload timed out after 3 minutes; skipped and continued to the next file."
+                Log.e(TAG, "Upload timeout for " + finalFileName, e)
             } catch (e: Exception) {
                 errorMessage = e.message ?: "Unknown error"
+                Log.e(TAG, "Upload failed for " + finalFileName, e)
+            } finally {
+                tempFile.delete()
             }
 
             if (uploadSuccess) {
