@@ -81,6 +81,7 @@ class MassUploadService : Service() {
         private const val PROGRESS_NOTIFICATION_ID = 2001
         private const val RESULT_NOTIFICATION_ID = 2002
         private const val PER_FILE_UPLOAD_TIMEOUT_MS = 3 * 60 * 1000L
+        private const val DUPLICATE_CHECK_TIMEOUT_MS = 45 * 1000L
 
         fun startUpload(
             context: Context,
@@ -309,7 +310,7 @@ class MassUploadService : Service() {
                 tempFile.delete()
                 failureCount++
                 errorDetails.add(
-                    "File #$currentIndex ($cleanTitle): Could not verify duplicates; upload stopped."
+                    "File #$currentIndex ($cleanTitle): Could not verify duplicates; skipped and continued."
                 )
                 continue
             }
