@@ -276,7 +276,17 @@ class MassUploadService : Service() {
             } else {
                 "File"
             }
-            val colorsList = if (isImage) PaletteExtractor.extractColorsFromUri(this, uri).hexList else emptyList()
+            val colorsList = if (isImage) {
+                try {
+                    PaletteExtractor.extractColorsFromUri(this, uri).hexList
+                } catch (e: Exception) {
+                    // A corrupt/unsupported image must not terminate the entire batch.
+                    Log.w(TAG, "Palette extraction failed for $cleanTitle; continuing upload", e)
+                    emptyList()
+                }
+            } else {
+                emptyList()
+            }
             val authorName = batchAuthor.takeIf { it.isNotBlank() } ?: CharacterAuthorUtils.getRandomCharacterName()
             val categoryStr = batchCategory.takeIf { it.isNotBlank() } ?: "Uncategorized"
 
