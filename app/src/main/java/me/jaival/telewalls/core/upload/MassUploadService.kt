@@ -222,6 +222,7 @@ class MassUploadService : Service() {
         val chatId = authRepository.activeChannelIdFlow.first() ?: 99999L
 
         for ((index, uri) in uris.withIndex()) {
+            try {
             if (isStopped) {
                 Log.d(TAG, "Upload stopped by user.")
                 break
@@ -402,6 +403,17 @@ class MassUploadService : Service() {
                     delay(100L)
                     delayMs += 100L
                 }
+            }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Preserve real coroutine cancellation (Stop button/service shutdown).
+                throw e
+            } catch (e: Exception) {
+                // CRITICAL: an unexpected error in ANY single file must not cancel the batch.
+                // Record it and move directly to the next file.
+                failureCount++
+                val detail = e.message ?: "Unexpected error"
+                errorDetails.add("File #$currentIndex ($cleanTitle): $detail")
+                Log.e(TAG, "Unexpected per-file error; continuing batch", e)
             }
         }
 
