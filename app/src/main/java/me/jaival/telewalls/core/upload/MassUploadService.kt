@@ -201,7 +201,156 @@ class MassUploadService : Service() {
         return START_NOT_STICKY
     }
 
-    private suspend fun processMassUpload(uris: List<Uri>, batchAuthor: String = "", batchWallpaperType: String = "", batchCategory: String = "", batchTags: String = "") {\n        val total = uris.size; var successCount = 0; var failureCount = 0\n        val errors = mutableListOf<String>()\n        val parsedTags = batchTags.split(",").map { it.trim() }.filter { it.isNotEmpty() }\n        val chatId = authRepository.activeChannelIdFlow.first() ?: 99999L\n        for ((index, uri) in uris.withIndex()) {\n            if (isStopped) break\n            val n = index + 1\n            try {\n                withTimeout(PER_FILE_UPLOAD_TIMEOUT_MS) {\n                    val r = uploadOneBatchFile(uri, index, n, total, chatId, batchAuthor, batchWallpaperType, batchCategory, parsedTags)\n                    if (r.first) successCount++ else if (!r.second) { failureCount++; errors.add("File #$n: $" + (r.third ?: "Upload failed")) } else if (r.third != null) errors.add("File #$n: $" + r.third)\n                }\n            } catch (e: kotlinx.coroutines.CancellationException) { throw e }\n              catch (e: Exception) { failureCount++; errors.add("File #$n: " + (e.message ?: "Processing failed; skipped")); Log.e(TAG, "Batch file #$n failed; continuing", e) }\n            if (!isStopped && n < total) delay(1500L)\n        }\n        stopForegroundService()\n        if (!isStopped) showFinalResultNotification(total, successCount, failureCount, errors)\n        stopSelf()\n    }\n\n    private suspend fun uploadOneBatchFile(uri: Uri, index: Int, n: Int, total: Int, chatId: Long, batchAuthor: String, batchWallpaperType: String, batchCategory: String, parsedTags: List<String>): Triple<Boolean, Boolean, String?> {\n        var tempFile: File? = null\n        try {\n            val raw = getFileNameFromUri(uri)\n            val title = cleanFileNameForTitle(raw ?: "photo_$n")\n            currentProgressIndex = n; totalProgressCount = total; currentPhotoTitle = title\n            while (isPaused && !isStopped) delay(500L)\n            if (isStopped) return Triple(false, true, "Batch stopped by user")\n            updateProgressNotification(n, total, title)\n            tempFile = copyUriToTempFile(uri, raw, index) ?: return Triple(false, false, "Failed to access selected file")\n            val mime = getMimeTypeFromUri(uri) ?: "application/octet-stream"\n            val hash = calculateSha256(tempFile!!)\n            val image = mime.lowercase().startsWith("image/")\n            val wh = if (image) detectResolution(uri) else Pair(0, 0)\n            val colors = if (image) try { PaletteExtractor.extractColorsFromUri(this, uri).hexList } catch (_: Exception) { emptyList() } else emptyList()\n            val name = raw ?: tempFile!!.name\n            val meta = WallpaperMetadata(title, batchCategory.ifBlank { "Uncategorized" }, parsedTags, if (image) "${wh.first}x${wh.second}" else "", if (image) computeAspectRatioString(wh.first, wh.second) else "", tempFile!!.length(), colors, "", batchAuthor.ifBlank { CharacterAuthorUtils.getRandomCharacterName() }, System.currentTimeMillis(), if (image) batchWallpaperType.ifBlank { if (wh.first >= wh.second) "Desktop/Tablet" else "Phone" } else "File", hash)\n            val duplicate = withTimeout(DUPLICATE_CHECK_TIMEOUT_MS) { wallpaperRepository.findPossibleDuplicate(chatId, name, tempFile!!.length(), mime, hash) }\n            if (duplicate != null) return Triple(false, true, "Duplicate skipped; already exists in Telegram")\n            try {\n                withTimeout(PER_FILE_UPLOAD_TIMEOUT_MS) {\n                    wallpaperRepository.uploadWallpaper(chatId, tempFile!!.absolutePath, name, mime, meta).collect { event ->\n                        when (event) {\n                            is TelegramUploadEvent.Progress -> Unit\n                            is TelegramUploadEvent.Succeeded -> wallpaperRepository.saveUploadedWallpaperToDb(event.document)\n                            is TelegramUploadEvent.Failed -> throw IllegalStateException(event.message)\n                        }\n                    }\n                }\n                return Triple(true, false, null)\n            } catch (e: kotlinx.coroutines.CancellationException) { throw e }\n              catch (e: Exception) { return Triple(false, false, e.message ?: "Upload failed") }\n        } finally { tempFile?.delete() }\n    }\n
+    private suspend fun processMassUpload(
+        uris: List<Uri>,
+        batchAuthor: String = "",
+        batchWallpaperType: String = "",
+        batchCategory: String = "",
+        batchTags: String = ""
+    ) {
+        val total = uris.size
+        var successCount = 0
+        var failureCount = 0
+        val errors = mutableListOf<String>()
+        val parsedTags = batchTags.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        val chatId = authRepository.activeChannelIdFlow.first() ?: 99999L
+
+        for ((index, uri) in uris.withIndex()) {
+            if (isStopped) break
+            val n = index + 1
+            try {
+                val result = withTimeout(PER_FILE_UPLOAD_TIMEOUT_MS) {
+                    uploadOneBatchFile(uri, index, n, total, chatId, batchAuthor, batchWallpaperType, batchCategory, parsedTags)
+                }
+                if (result.success) successCount++
+                else if (!result.skipped) failureCount++
+                result.message?.let { errors.add("File #$n: $it") }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                failureCount++
+                errors.add("File #$n: " + (e.message ?: "Processing failed; skipped"))
+                Log.e(TAG, "Batch file #$n failed; continuing", e)
+            }
+            if (!isStopped && n < total) delay(1500L)
+        }
+
+        stopForegroundService()
+        if (!isStopped) showFinalResultNotification(total, successCount, failureCount, errors)
+        stopSelf()
+    }
+
+    private data class BatchFileResult(
+        val success: Boolean,
+        val skipped: Boolean,
+        val message: String?
+    )
+
+    private suspend fun uploadOneBatchFile(
+        uri: Uri,
+        index: Int,
+        n: Int,
+        total: Int,
+        chatId: Long,
+        batchAuthor: String,
+        batchWallpaperType: String,
+        batchCategory: String,
+        parsedTags: List<String>
+    ): BatchFileResult {
+        var tempFile: File? = null
+        try {
+            val raw = getFileNameFromUri(uri)
+            val title = cleanFileNameForTitle(raw ?: "photo_$n")
+            currentProgressIndex = n
+            totalProgressCount = total
+            currentPhotoTitle = title
+
+            while (isPaused && !isStopped) delay(500L)
+            if (isStopped) return BatchFileResult(false, true, "Batch stopped by user")
+            updateProgressNotification(n, total, title)
+
+            tempFile = copyUriToTempFile(uri, raw, index)
+            if (tempFile == null || !tempFile!!.exists()) {
+                return BatchFileResult(false, false, "Failed to access selected file")
+            }
+
+            val mime = getMimeTypeFromUri(uri) ?: "application/octet-stream"
+            val hash = calculateSha256(tempFile!!)
+            val image = mime.lowercase().startsWith("image/")
+            val wh = if (image) detectResolution(uri) else Pair(0, 0)
+            val colors = if (image) {
+                try {
+                    PaletteExtractor.extractColorsFromUri(this, uri).hexList
+                } catch (e: Exception) {
+                    Log.w(TAG, "Palette extraction failed for $title", e)
+                    emptyList()
+                }
+            } else emptyList()
+
+            val name = raw ?: tempFile!!.name
+            val type = if (image) {
+                when {
+                    batchWallpaperType.equals("Phone", true) -> "Phone"
+                    batchWallpaperType.equals("Desktop/Tablet", true) || batchWallpaperType.equals("Desktop", true) -> "Desktop/Tablet"
+                    wh.first >= wh.second -> "Desktop/Tablet"
+                    else -> "Phone"
+                }
+            } else "File"
+
+            val meta = WallpaperMetadata(
+                title = title,
+                category = batchCategory.ifBlank { "Uncategorized" },
+                tags = parsedTags,
+                resolution = if (image) "${wh.first}x${wh.second}" else "",
+                aspectRatio = if (image) computeAspectRatioString(wh.first, wh.second) else "",
+                sizeBytes = tempFile!!.length(),
+                colors = colors,
+                description = "",
+                author = batchAuthor.ifBlank { CharacterAuthorUtils.getRandomCharacterName() },
+                timestamp = System.currentTimeMillis(),
+                wallpaperType = type,
+                sha256 = hash
+            )
+
+            val duplicate = withTimeout(DUPLICATE_CHECK_TIMEOUT_MS) {
+                wallpaperRepository.findPossibleDuplicate(chatId, name, tempFile!!.length(), mime, hash)
+            }
+            if (duplicate != null) {
+                return BatchFileResult(false, true, "Duplicate skipped; already exists in Telegram")
+            }
+
+            // IMPORTANT: first terminal event wins. We do not wait for the callbackFlow
+            // itself to close after Telegram reports a failure.
+            val terminal = withTimeout(PER_FILE_UPLOAD_TIMEOUT_MS) {
+                wallpaperRepository.uploadWallpaper(chatId, tempFile!!.absolutePath, name, mime, meta)
+                    .first { event ->
+                        event is TelegramUploadEvent.Succeeded || event is TelegramUploadEvent.Failed
+                    }
+            }
+
+            return when (terminal) {
+                is TelegramUploadEvent.Succeeded -> {
+                    wallpaperRepository.saveUploadedWallpaperToDb(terminal.document)
+                    BatchFileResult(true, false, null)
+                }
+                is TelegramUploadEvent.Failed -> {
+                    BatchFileResult(false, false, terminal.message ?: "Upload failed; skipped")
+                }
+                is TelegramUploadEvent.Progress -> BatchFileResult(false, false, "Upload ended without a terminal result")
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            Log.e(TAG, "File #$n timed out; continuing", e)
+            return BatchFileResult(false, false, "Timed out; skipped and continued to the next file")
+        } catch (e: Exception) {
+            Log.e(TAG, "File #$n failed; continuing", e)
+            return BatchFileResult(false, false, e.message ?: "Upload failed; skipped")
+        } finally {
+            tempFile?.delete()
+        }
+    }
+
     private fun calculateSha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
         BufferedInputStream(file.inputStream()).use { input ->
