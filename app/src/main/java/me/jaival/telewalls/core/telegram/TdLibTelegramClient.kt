@@ -518,8 +518,12 @@ class TdLibTelegramClient @Inject constructor(
                     caption = TdApi.FormattedText(jsonCaption, emptyArray())
                 }
 
+                // TDLib can emit UpdateMessageSendFailed before SendMessage returns.
+                // Keep terminal failures that arrive during that small race instead of
+                // silently dropping them and forcing the batch to wait for the timeout.
                 val pendingMsgId = CompletableDeferred<Long>()
                 val pendingFileId = CompletableDeferred<Int>()
+                val earlyFailedUpdates = mutableListOf<TdApi.UpdateMessageSendFailed>()
 
                 var updateCollector: kotlinx.coroutines.Job? = null
                 updateCollector = launch {
@@ -542,17 +546,21 @@ class TdLibTelegramClient @Inject constructor(
                                         )
                                         trySend(TelegramUploadEvent.Succeeded(finalDoc))
                                         close()
+                                        updateCollector?.cancel()
                                     }
                                 }
                             }
                             is TdApi.UpdateMessageSendFailed -> {
-                                if (pendingMsgId.isCompleted && update.oldMessageId == pendingMsgId.await()) {
-                                    trySend(TelegramUploadEvent.Failed(update.error?.message ?: "Upload failed"))
-                                    close()
-                                    // Stop only this file's update collector. Do not throw from
-                                    // the collector: a child coroutine failure could cancel the
-                                    // upload job and could cancel the batch service as well.
-                                    updateCollector?.cancel()
+                                if (pendingMsgId.isCompleted) {
+                                    if (update.oldMessageId == pendingMsgId.await()) {
+                                        trySend(TelegramUploadEvent.Failed(update.error?.message ?: "Upload failed"))
+                                        close()
+                                        updateCollector?.cancel()
+                                    }
+                                } else {
+                                    synchronized(earlyFailedUpdates) {
+                                        earlyFailedUpdates.add(update)
+                                    }
                                 }
                             }
                         }
@@ -561,6 +569,18 @@ class TdLibTelegramClient @Inject constructor(
 
                 val msg = sendTd<TdApi.Message>(TdApi.SendMessage(chatId, null, null, null, null, docContent))
                 pendingMsgId.complete(msg.id)
+
+                // Process a failure that arrived before SendMessage returned.
+                val earlyFailure = synchronized(earlyFailedUpdates) {
+                    earlyFailedUpdates.firstOrNull { it.oldMessageId == msg.id }
+                }
+                if (earlyFailure != null) {
+                    trySend(TelegramUploadEvent.Failed(earlyFailure.error?.message ?: "Upload failed"))
+                    close()
+                    updateCollector.cancel()
+                    return@launch
+                }
+
                 if (msg.content is TdApi.MessageDocument) {
                     val file = (msg.content as TdApi.MessageDocument).document.document
                     pendingFileId.complete(file.id)
