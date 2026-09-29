@@ -236,7 +236,11 @@ class MassUploadService : Service() {
             totalProgressCount = total
             currentPhotoTitle = cleanTitle
 
-            // Wait if paused
+            // IMPORTANT: isolate the entire file. Any unexpected error while preparing,
+            // hashing, extracting metadata, checking duplicates, or uploading this file
+            // must be converted into a failure and MUST NOT cancel the batch loop.
+            try {
+                // Wait if paused
             while (isPaused && !isStopped) {
                 updateProgressNotification(currentIndex, total, cleanTitle)
                 delay(500L)
@@ -414,6 +418,16 @@ class MassUploadService : Service() {
                 val detail = e.message ?: "Unexpected error"
                 errorDetails.add("File #$currentIndex ($cleanTitle): $detail")
                 Log.e(TAG, "Unexpected per-file error; continuing batch", e)
+            }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Preserve real batch/service cancellation (Stop button, service shutdown).
+                throw e
+            } catch (e: Exception) {
+                failureCount++
+                val detail = e.message ?: "Unexpected file processing error"
+                errorDetails.add("File #$currentIndex ($cleanTitle): $detail")
+                Log.e(TAG, "Unexpected error while processing file #$currentIndex", e)
+                // The loop intentionally continues with the next URI.
             }
         }
 
