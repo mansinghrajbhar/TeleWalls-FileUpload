@@ -22,6 +22,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.first as firstFlowEvent
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import me.jaival.telewalls.MainActivity
@@ -339,27 +340,27 @@ class MassUploadService : Service() {
 
             try {
                 withTimeout(PER_FILE_UPLOAD_TIMEOUT_MS) {
-                    wallpaperRepository.uploadWallpaper(
+                    val terminalEvent = wallpaperRepository.uploadWallpaper(
                         chatId = chatId,
                         localPath = tempFile.absolutePath,
                         fileName = finalFileName,
                         mimeType = mimeType,
                         metadata = metadata
-                    ).collect { event ->
-                        when (event) {
-                            is TelegramUploadEvent.Progress -> {
-                                // Progress update if needed
-                            }
-                            is TelegramUploadEvent.Succeeded -> {
-                                wallpaperRepository.saveUploadedWallpaperToDb(event.document)
-                                uploadSuccess = true
-                            }
-                            is TelegramUploadEvent.Failed -> {
-                                // Stop collecting this file immediately. TDLib can keep the
-                                // Flow open after reporting Failed; waiting for completion
-                                // would block every remaining file in the batch.
-                                throw IllegalStateException(event.message)
-                            }
+                    ).firstFlowEvent { event ->
+                        event is TelegramUploadEvent.Succeeded ||
+                            event is TelegramUploadEvent.Failed
+                    }
+
+                    when (terminalEvent) {
+                        is TelegramUploadEvent.Succeeded -> {
+                            wallpaperRepository.saveUploadedWallpaperToDb(terminalEvent.document)
+                            uploadSuccess = true
+                        }
+                        is TelegramUploadEvent.Failed -> {
+                            throw IllegalStateException(terminalEvent.message)
+                        }
+                        is TelegramUploadEvent.Progress -> {
+                            // The terminal-event predicate guarantees this is unreachable.
                         }
                     }
                 }
