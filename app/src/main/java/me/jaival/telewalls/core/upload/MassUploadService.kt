@@ -22,7 +22,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.first as firstFlowEvent
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import me.jaival.telewalls.MainActivity
