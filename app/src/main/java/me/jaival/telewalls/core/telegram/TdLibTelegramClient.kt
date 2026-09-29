@@ -514,7 +514,7 @@ class TdLibTelegramClient @Inject constructor(
                 val docContent = TdApi.InputMessageDocument().apply {
                     document = TdApi.InputFileLocal(localPath)
                     thumbnail = inputThumbnail
-                    disableContentTypeDetection = false
+                    disableContentTypeDetection = true
                     caption = TdApi.FormattedText(jsonCaption, emptyArray())
                 }
 
