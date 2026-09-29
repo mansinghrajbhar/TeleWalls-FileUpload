@@ -21,9 +21,14 @@ object PaletteExtractor {
     )
 
     suspend fun extractColorsFromUri(context: Context, uri: Uri): WallpaperColors = withContext(Dispatchers.IO) {
-        val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
-        val bitmap = BitmapFactory.decodeStream(inputStream)
-        extractColorsFromBitmap(bitmap)
+        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+            val bitmap = BitmapFactory.decodeStream(inputStream)
+            try {
+                extractColorsFromBitmap(bitmap)
+            } finally {
+                bitmap?.recycle()
+            }
+        } ?: defaultColors()
     }
 
     fun extractColorsFromBitmap(bitmap: Bitmap?): WallpaperColors {
