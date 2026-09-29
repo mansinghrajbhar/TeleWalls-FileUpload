@@ -7,7 +7,6 @@ import android.net.Uri
 import androidx.palette.graphics.Palette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.InputStream
 
 object PaletteExtractor {
 
