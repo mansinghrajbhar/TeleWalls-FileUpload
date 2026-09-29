@@ -521,7 +521,8 @@ class TdLibTelegramClient @Inject constructor(
                 val pendingMsgId = CompletableDeferred<Long>()
                 val pendingFileId = CompletableDeferred<Int>()
 
-                val updateCollector = launch {
+                var updateCollector: kotlinx.coroutines.Job? = null
+                updateCollector = launch {
                     updates.collect { update ->
                         when (update) {
                             is TdApi.UpdateFile -> {
@@ -548,6 +549,10 @@ class TdLibTelegramClient @Inject constructor(
                                 if (pendingMsgId.isCompleted && update.oldMessageId == pendingMsgId.await()) {
                                     trySend(TelegramUploadEvent.Failed(update.error?.message ?: "Upload failed"))
                                     close()
+                                    // Stop only this file's update collector. Do not throw from
+                                    // the collector: a child coroutine failure could cancel the
+                                    // upload job and could cancel the batch service as well.
+                                    updateCollector?.cancel()
                                 }
                             }
                         }
