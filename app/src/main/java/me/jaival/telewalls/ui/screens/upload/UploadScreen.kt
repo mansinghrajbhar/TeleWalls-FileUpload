@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import me.jaival.telewalls.ui.components.CategoryChips
+import me.jaival.telewalls.ui.components.GeminiProcessingDialog
 import me.jaival.telewalls.viewmodel.UploadState
 import me.jaival.telewalls.viewmodel.UploadViewModel
 
@@ -102,6 +103,8 @@ fun UploadScreen(
     var author by remember { mutableStateOf("") }
 
     var showAddCategoryDialog by remember { mutableStateOf(false) }
+    var showGeminiDialog by remember { mutableStateOf(false) }
+    var useAiForUpload by remember { mutableStateOf(false) }
     var newCategoryInput by remember { mutableStateOf("") }
     var showDuplicateDialog by remember { mutableStateOf(false) }
 
@@ -498,14 +501,20 @@ fun UploadScreen(
             // Submit Button
             Button(
                 onClick = {
-                    viewModel.startUpload(
-                        context = context,
-                        title = title,
-                        category = selectedCategory,
-                        tags = tags,
-                        description = description,
-                        author = author
-                    )
+                    if (viewModel.isGeminiConfigured()) {
+                        showGeminiDialog = true
+                    } else {
+                        useAiForUpload = false
+                        viewModel.startUpload(
+                            context = context,
+                            title = title,
+                            category = selectedCategory,
+                            tags = tags,
+                            description = description,
+                            author = author,
+                            useAi = false
+                        )
+                    }
                 },
                 enabled = selectedUri != null && uploadState !is UploadState.Uploading,
                 modifier = Modifier
@@ -530,6 +539,38 @@ fun UploadScreen(
         }
     }
 
+    if (showGeminiDialog) {
+        GeminiProcessingDialog(
+            onAnalyze = {
+                showGeminiDialog = false
+                useAiForUpload = true
+                viewModel.startUpload(
+                    context = context,
+                    title = title,
+                    category = selectedCategory,
+                    tags = tags,
+                    description = description,
+                    author = author,
+                    useAi = true
+                )
+            },
+            onSkip = {
+                showGeminiDialog = false
+                useAiForUpload = false
+                viewModel.startUpload(
+                    context = context,
+                    title = title,
+                    category = selectedCategory,
+                    tags = tags,
+                    description = description,
+                    author = author,
+                    useAi = false
+                )
+            },
+            onDismiss = { showGeminiDialog = false }
+        )
+    }
+
     if (showDuplicateDialog && uploadState is UploadState.DuplicateFound) {
         val duplicate = uploadState as UploadState.DuplicateFound
         AlertDialog(
@@ -545,7 +586,7 @@ fun UploadScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showDuplicateDialog = false
-                    viewModel.startUpload(context, title, selectedCategory, tags, description, author, forceUpload = true)
+                    viewModel.startUpload(context, title, selectedCategory, tags, description, author, forceUpload = true, useAi = useAiForUpload)
                 }) { Text("Upload Anyway") }
             },
             dismissButton = {
@@ -654,3 +695,4 @@ fun UploadScreen(
         )
     }
 }
+
