@@ -24,10 +24,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
@@ -67,6 +69,7 @@ val defaultBottomNavItems = listOf(
     NavItem(ScreenRoutes.HOME, "Home", Icons.Filled.Home, Icons.Outlined.Home),
     NavItem(ScreenRoutes.COLLECTIONS, "Categories", Icons.Filled.GridView, Icons.Outlined.GridView),
     NavItem(ScreenRoutes.FAVORITES, "Favorites", Icons.Filled.Favorite, Icons.Outlined.FavoriteBorder),
+    NavItem(ScreenRoutes.AI, "AI", Icons.Filled.AutoAwesome, Icons.Outlined.AutoAwesome),
     NavItem(ScreenRoutes.SETTINGS, "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 )
 
