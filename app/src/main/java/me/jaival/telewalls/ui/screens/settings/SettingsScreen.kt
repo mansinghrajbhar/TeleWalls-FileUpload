@@ -40,6 +40,7 @@ import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Sync
@@ -90,6 +91,7 @@ import me.jaival.telewalls.ui.theme.LocalReduceAnimations
 import me.jaival.telewalls.viewmodel.AppUpdateViewModel
 import me.jaival.telewalls.viewmodel.AuthViewModel
 import me.jaival.telewalls.viewmodel.SettingsViewModel
+import me.jaival.telewalls.ui.components.GeminiApiKeyDialog
 
 data class OpenSourceLibrary(
     val name: String,
@@ -181,6 +183,7 @@ fun SettingsScreen(
     val allCategories by settingsViewModel.allCategories.collectAsState()
     val cacheSizeBytes by settingsViewModel.cacheSizeBytes.collectAsState()
     val isClearingCache by settingsViewModel.isClearingCache.collectAsState()
+    var showGeminiDialog by remember { mutableStateOf(false) }
 
     val phoneNumber by authViewModel.phoneNumber.collectAsState()
     val userName by authViewModel.userName.collectAsState()
@@ -274,6 +277,13 @@ fun SettingsScreen(
                                 WallpaperTypeFilter.DESKTOP -> "Desktop & Tablet Wallpapers only"
                             },
                             onClick = { showTypeDialog = true }
+                        )
+
+                        SettingItemRow(
+                            icon = Icons.Outlined.AutoAwesome,
+                            title = "Gemini AI",
+                            subtitle = if (settingsViewModel.hasGeminiApiKey.collectAsState().value) "API key configured — AI analysis available" else "Configure Gemini for AI categorization & image tags",
+                            onClick = { showGeminiDialog = true }
                         )
 
                         // Option 2: Reduce animations toggle (default off)
@@ -636,6 +646,13 @@ fun SettingsScreen(
             },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             shape = RoundedCornerShape(24.dp)
+        )
+    }
+
+    if (showGeminiDialog) {
+        GeminiApiKeyDialog(
+            settingsViewModel = settingsViewModel,
+            onDismiss = { showGeminiDialog = false }
         )
     }
 
