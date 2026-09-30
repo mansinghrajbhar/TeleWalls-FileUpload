@@ -35,6 +35,7 @@ import me.jaival.telewalls.ui.dialogs.MassUploadDialog
 import me.jaival.telewalls.ui.dialogs.UpdateAvailableDialog
 import me.jaival.telewalls.ui.dialogs.WelcomeDialog
 import me.jaival.telewalls.ui.screens.account.AccountScreen
+import me.jaival.telewalls.ui.screens.ai.AiScreen
 import me.jaival.telewalls.ui.screens.auth.AuthScreen
 import me.jaival.telewalls.ui.screens.ai.AiScreen
 import me.jaival.telewalls.ui.screens.collections.CategoryDetailScreen
@@ -275,6 +276,10 @@ fun TeleWallsNavGraph(
                         },
                         onBackClick = { navController.popBackStack() }
                     )
+                }
+
+                composable(ScreenRoutes.AI) {
+                    AiScreen(settingsViewModel = settingsViewModel)
                 }
 
                 composable(ScreenRoutes.FAVORITES) {
