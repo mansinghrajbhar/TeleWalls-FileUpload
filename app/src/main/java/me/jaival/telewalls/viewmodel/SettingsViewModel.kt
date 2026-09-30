@@ -40,7 +40,8 @@ class SettingsViewModel @Inject constructor(
     val syncFavorites: StateFlow<Boolean> = settingsRepository.syncFavoritesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
-    val hasGeminiApiKey: StateFlow<Boolean> = kotlinx.coroutines.flow.flow { emit(geminiApiKeyStore.getApiKey() != null) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    private val _hasGeminiApiKey = MutableStateFlow(geminiApiKeyStore.getApiKey() != null)
+    val hasGeminiApiKey: StateFlow<Boolean> = _hasGeminiApiKey.asStateFlow()
 
     val allCategories: StateFlow<List<String>> = wallpaperRepository.rawCategories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WallpaperRepository.DEFAULT_CATEGORIES)
@@ -109,8 +110,8 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun saveGeminiApiKey(key: String) { geminiApiKeyStore.setApiKey(key) }
-    fun clearGeminiApiKey() { geminiApiKeyStore.clearApiKey() }
+    fun saveGeminiApiKey(key: String) { geminiApiKeyStore.setApiKey(key); _hasGeminiApiKey.value = key.isNotBlank() }
+    fun clearGeminiApiKey() { geminiApiKeyStore.clearApiKey(); _hasGeminiApiKey.value = false }
 
     fun setHasSeenWelcomeDialog(seen: Boolean) {
         viewModelScope.launch {
