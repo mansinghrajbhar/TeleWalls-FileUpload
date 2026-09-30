@@ -8,7 +8,6 @@ object ScreenRoutes {
     const val AI = "ai"
     const val UPLOAD = "upload"
     const val AUTH = "auth"
-    const val AI = "ai"
     const val SETTINGS = "settings"
     const val ACCOUNT = "account"
     const val DETAIL = "detail/{wallpaperId}"
