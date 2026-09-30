@@ -76,6 +76,8 @@ class UploadViewModel @Inject constructor(
     private val _detectedColors = MutableStateFlow<List<String>>(emptyList())
     val detectedColors: StateFlow<List<String>> = _detectedColors.asStateFlow()
 
+    fun isGeminiConfigured(): Boolean = geminiAiService.hasApiKey()
+
     fun createCategory(categoryName: String, onCategoryCreated: (String) -> Unit, onError: (String) -> Unit = {}) {
         val name = categoryName.trim()
         if (name.isBlank()) return
