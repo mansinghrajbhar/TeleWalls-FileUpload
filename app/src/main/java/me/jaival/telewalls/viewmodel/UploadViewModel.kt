@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.jaival.telewalls.core.palette.PaletteExtractor
+import me.jaival.telewalls.core.ai.GeminiAiService
 import me.jaival.telewalls.core.telegram.TelegramUploadEvent
 import me.jaival.telewalls.core.telegram.WallpaperMetadata
 import me.jaival.telewalls.core.util.CharacterAuthorUtils
@@ -43,7 +44,8 @@ sealed interface UploadState {
 @HiltViewModel
 class UploadViewModel @Inject constructor(
     private val wallpaperRepository: WallpaperRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val geminiAiService: GeminiAiService
 ) : ViewModel() {
 
     private val _uploadState = MutableStateFlow<UploadState>(UploadState.Idle)
@@ -222,7 +224,8 @@ class UploadViewModel @Inject constructor(
         description: String,
         author: String,
         wallpaperType: String = _selectedWallpaperType.value,
-        forceUpload: Boolean = false
+        forceUpload: Boolean = false,
+        useAi: Boolean = false
     ) {
         val uri = _selectedImageUri.value ?: run {
             _uploadState.value = UploadState.Error("Please select a file first")
@@ -284,16 +287,29 @@ class UploadViewModel @Inject constructor(
                 "File"
             }
 
-            val finalCategory = category.trim().ifBlank { "Uncategorized" }
+            var finalCategory = category.trim().ifBlank { "Uncategorized" }
+            var finalTags = tags.split(",").map { it.trim() }.filter { it.isNotBlank() }
+            var finalDescription = description
+            if (useAi) {
+                _uploadState.value = UploadState.Processing("Analyzing with Gemini AI...")
+                val analysis = geminiAiService.analyzeFile(context, uri, finalFileName, mimeType).getOrElse {
+                    _uploadState.value = UploadState.Error("Gemini AI analysis failed: $it.message")
+                    file.delete()
+                    return@launch
+                }
+                if (category.isBlank()) finalCategory = analysis.category
+                finalTags = (finalTags + analysis.tags + analysis.imageLabels).distinct()
+                if (finalDescription.isBlank()) finalDescription = analysis.description
+            }
             val metadata = WallpaperMetadata(
                 title = wallpaperTitle,
                 category = finalCategory,
-                tags = tags.split(",").map { it.trim() }.filter { it.isNotBlank() },
+                tags = finalTags,
                 resolution = _detectedResolution.value,
                 aspectRatio = computeAspectRatioString(_detectedResolution.value),
                 sizeBytes = file.length(),
                 colors = _detectedColors.value,
-                description = description,
+                description = finalDescription,
                 author = author.trim().ifBlank { CharacterAuthorUtils.getRandomCharacterName() },
                 timestamp = System.currentTimeMillis(),
                 wallpaperType = chosenType,
