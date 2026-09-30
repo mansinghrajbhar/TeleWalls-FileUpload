@@ -5,6 +5,7 @@ object ScreenRoutes {
     const val HOME = "home?q={q}"
     const val COLLECTIONS = "collections"
     const val FAVORITES = "favorites"
+    const val AI = "ai"
     const val UPLOAD = "upload"
     const val AUTH = "auth"
     const val SETTINGS = "settings"
