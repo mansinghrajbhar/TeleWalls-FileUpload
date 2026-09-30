@@ -48,7 +48,7 @@ class GeminiAiService @Inject constructor(private val apiKeyStore: GeminiApiKeyS
             val root = gson.fromJson(response, JsonObject::class.java)
             val output = root.getAsJsonArray("steps")?.asSequence()?.map { it.asJsonObject }?.filter { it.get("type")?.asString == "model_output" }?.flatMap { it.getAsJsonArray("content").asSequence() }?.mapNotNull { it.asJsonObject.get("text")?.asString }?.lastOrNull()
                 ?: root.get("output_text")?.asString ?: return@withContext Result.failure(IllegalStateException("Gemini returned no analysis"))
-            val cleaned = output.trim().replace(String.fromCharCode(96).toString(), "").removePrefix("json").trim()
+            val cleaned = output.trim().replace("```json", "").replace("```", "").removePrefix("json").trim()
             val json = gson.fromJson(cleaned, JsonObject::class.java)
             Result.success(GeminiFileAnalysis(
                 category = json.get("category")?.asString?.trim().orEmpty().ifBlank { "Other" },
