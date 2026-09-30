@@ -15,6 +15,8 @@ import javax.inject.Singleton
 data class GeminiFileAnalysis(val category: String, val description: String, val tags: List<String>, val imageLabels: List<String> = emptyList())
 @Singleton
 class GeminiAiService @Inject constructor(private val apiKeyStore: GeminiApiKeyStore, private val gson: Gson) {
+    fun hasApiKey(): Boolean = apiKeyStore.getApiKey() != null
+
     suspend fun analyzeFile(context: Context, uri: Uri, fileName: String, mimeType: String): Result<GeminiFileAnalysis> = withContext(Dispatchers.IO) {
         val key = apiKeyStore.getApiKey() ?: return@withContext Result.failure(IllegalStateException("Gemini API key is not configured"))
         try {
