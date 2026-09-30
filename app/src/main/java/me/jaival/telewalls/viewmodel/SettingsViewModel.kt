@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import me.jaival.telewalls.core.ai.GeminiApiKeyStore
 import me.jaival.telewalls.data.repository.SettingsRepository
 import me.jaival.telewalls.data.repository.WallpaperRepository
 import me.jaival.telewalls.data.repository.WallpaperTypeFilter
@@ -19,7 +20,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
-    private val wallpaperRepository: WallpaperRepository
+    private val wallpaperRepository: WallpaperRepository,
+    private val geminiApiKeyStore: GeminiApiKeyStore
 ) : ViewModel() {
 
     val hasSeenWelcomeDialog: StateFlow<Boolean?> = settingsRepository.hasSeenWelcomeDialogFlow
@@ -37,6 +39,8 @@ class SettingsViewModel @Inject constructor(
 
     val syncFavorites: StateFlow<Boolean> = settingsRepository.syncFavoritesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val hasGeminiApiKey: StateFlow<Boolean> = kotlinx.coroutines.flow.flow { emit(geminiApiKeyStore.getApiKey() != null) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val allCategories: StateFlow<List<String>> = wallpaperRepository.rawCategories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WallpaperRepository.DEFAULT_CATEGORIES)
@@ -104,6 +108,9 @@ class SettingsViewModel @Inject constructor(
             else -> String.format(Locale.US, "%.2f KB", kb)
         }
     }
+
+    fun saveGeminiApiKey(key: String) { geminiApiKeyStore.setApiKey(key) }
+    fun clearGeminiApiKey() { geminiApiKeyStore.clearApiKey() }
 
     fun setHasSeenWelcomeDialog(seen: Boolean) {
         viewModelScope.launch {
