@@ -21,15 +21,19 @@ class GeminiAiService @Inject constructor(private val apiKeyStore: GeminiApiKeyS
         val key = apiKeyStore.getApiKey() ?: return@withContext Result.failure(IllegalStateException("Gemini API key is not configured"))
         try {
             val prompt = "Analyze this file for a personal file/wallpaper library. Return ONLY valid JSON with exactly these fields: category, description, tags (3-8 lowercase tags), imageLabels (3-10 lowercase visual labels, [] for non-images). Category should be useful, such as Documents, Photos, Videos, Audio, Apps, Archives, Wallpapers, Work, Personal or Other. File name: $fileName. MIME type: $mimeType."
-            val parts = mutableListOf<JsonObject>()
-            parts += gson.fromJson("""{"text":${gson.toJson(prompt)}}""", JsonObject::class.java)
+            val input = com.google.gson.JsonArray()
+            input.add(gson.fromJson("""{"type":"text","text":${gson.toJson(prompt)}}""", JsonObject::class.java))
             if (mimeType.startsWith("image/")) {
-                val image = readImageAsJpegBase64(context, uri) ?: return@withContext Result.failure(IllegalArgumentException("Could not read image for AI analysis"))
-                parts += gson.fromJson("""{"inline_data":{"mime_type":"image/jpeg","data":${gson.toJson(image)}}""", JsonObject::class.java)
+                val image = readImageAsJpegBase64(context, uri)
+                    ?: return@withContext Result.failure(IllegalArgumentException("Could not read image for AI analysis"))
+                input.add(gson.fromJson(
+                    """{"type":"image","data":${gson.toJson(image),"mime_type":"image/jpeg"}""",
+                    JsonObject::class.java
+                ))
             }
             val body = JsonObject().apply {
                 addProperty("model", "gemini-3.8-flash")
-                add("input", gson.fromJson("""[{"role":"user","content":{"parts":${gson.toJson(parts)}}}]""", com.google.gson.JsonArray::class.java))
+                add("input", input)
                 addProperty("store", false)
             }
             val connection = (URL("https://generativelanguage.googleapis.com/v1beta/interactions").openConnection() as HttpURLConnection).apply {
