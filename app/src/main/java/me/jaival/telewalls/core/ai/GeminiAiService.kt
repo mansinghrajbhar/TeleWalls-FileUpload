@@ -63,9 +63,18 @@ class GeminiAiService @Inject constructor(private val apiKeyStore: GeminiApiKeyS
         return try {
             val scaled = if (bitmap.width > 1600 || bitmap.height > 1600) {
                 val scale = minOf(1600f / bitmap.width, 1600f / bitmap.height)
-                BitmapFactory.decodeStream(context.contentResolver.openInputStream(uri)) ?: bitmap
+                android.graphics.Bitmap.createScaledBitmap(
+                    bitmap,
+                    (bitmap.width * scale).toInt().coerceAtLeast(1),
+                    (bitmap.height * scale).toInt().coerceAtLeast(1),
+                    true
+                )
             } else bitmap
-            ByteArrayOutputStream().use { out -> scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, out); Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP) }
+            ByteArrayOutputStream().use { out ->
+                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, out)
+                Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+            }.also { if (scaled !== bitmap) scaled.recycle() }
         } finally { bitmap.recycle() }
     }
+}
 }
