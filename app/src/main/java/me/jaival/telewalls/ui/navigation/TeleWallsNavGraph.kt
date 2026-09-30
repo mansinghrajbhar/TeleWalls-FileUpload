@@ -36,6 +36,7 @@ import me.jaival.telewalls.ui.dialogs.UpdateAvailableDialog
 import me.jaival.telewalls.ui.dialogs.WelcomeDialog
 import me.jaival.telewalls.ui.screens.account.AccountScreen
 import me.jaival.telewalls.ui.screens.auth.AuthScreen
+import me.jaival.telewalls.ui.screens.ai.AiScreen
 import me.jaival.telewalls.ui.screens.collections.CategoryDetailScreen
 import me.jaival.telewalls.ui.screens.detail.DetailScreen
 import me.jaival.telewalls.ui.screens.favorites.FavoritesScreen
@@ -156,6 +157,7 @@ fun TeleWallsNavGraph(
         ScreenRoutes.HOME,
         ScreenRoutes.COLLECTIONS,
         ScreenRoutes.FAVORITES,
+        ScreenRoutes.AI,
         ScreenRoutes.SETTINGS
     )
 
@@ -178,6 +180,7 @@ fun TeleWallsNavGraph(
                                 ScreenRoutes.HOME -> homeScrollToTopTrigger++
                                 ScreenRoutes.COLLECTIONS -> collectionsScrollToTopTrigger++
                                 ScreenRoutes.FAVORITES -> favoritesScrollToTopTrigger++
+                                ScreenRoutes.AI -> { }
                             }
                         }
                     }
