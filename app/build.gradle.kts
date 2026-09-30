@@ -132,6 +132,7 @@ dependencies {
     implementation(libs.lottie.compose)
     implementation(libs.tdlib)
     implementation(libs.aboutlibraries.compose.m3)
+    implementation(libs.androidx.security.crypto)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
