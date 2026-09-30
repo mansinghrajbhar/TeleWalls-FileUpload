@@ -27,7 +27,7 @@ class GeminiAiService @Inject constructor(private val apiKeyStore: GeminiApiKeyS
                 val image = readImageAsJpegBase64(context, uri)
                     ?: return@withContext Result.failure(IllegalArgumentException("Could not read image for AI analysis"))
                 input.add(gson.fromJson(
-                    """{"type":"image","data":${gson.toJson(image),"mime_type":"image/jpeg"}""",
+                    """{"type":"image","data":${gson.toJson(image)},"mime_type":"image/jpeg"}""",
                     JsonObject::class.java
                 ))
             }
@@ -76,5 +76,4 @@ class GeminiAiService @Inject constructor(private val apiKeyStore: GeminiApiKeyS
             }.also { if (scaled !== bitmap) scaled.recycle() }
         } finally { bitmap.recycle() }
     }
-}
 }
